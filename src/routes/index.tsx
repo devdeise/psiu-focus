@@ -3,13 +3,14 @@ import { AppLayout } from "@/components/app-layout";
 import {
   Calendar,
   Clock,
-  Wallet,
   AlertTriangle,
   UserPlus,
   CheckCircle2,
   ArrowRight,
-  TrendingUp,
+  Users,
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -88,11 +89,58 @@ function QuickAction({
   );
 }
 
+const NOTES_KEY = "psiu:quick-notes";
+
+function loadNotes(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(NOTES_KEY);
+    return raw ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveNotes(value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(NOTES_KEY, value);
+  } catch {}
+}
+
 function HomePage() {
-  const now = new Date();
-  const hour = now.getHours();
-  const greeting =
-    hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const [greeting, setGreeting] = useState("Bom dia");
+  const [notes, setNotes] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [activePatients, setActivePatients] = useState(0);
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreeting(hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite");
+    setNotes(loadNotes());
+
+    try {
+      const raw = window.localStorage.getItem("psiu:patients");
+      if (raw) {
+        const patients = JSON.parse(raw) as Array<{ status?: string }>;
+        const count = patients.filter((p) => p.status !== "encerrado").length;
+        setActivePatients(count);
+      }
+    } catch {
+      setActivePatients(0);
+    }
+  }, []);
+
+  const handleSaveNotes = () => {
+    saveNotes(notes);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleClearNotes = () => {
+    setNotes("");
+    saveNotes("");
+  };
 
   return (
     <AppLayout>
@@ -112,8 +160,10 @@ function HomePage() {
 
         {/* Próximo atendimento */}
         <section className="glass-card relative overflow-hidden p-6">
-          <div className="pointer-events-none absolute inset-0 opacity-60"
-            style={{ backgroundImage: "var(--gradient-glow)" }} />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-60"
+            style={{ backgroundImage: "var(--gradient-glow)" }}
+          />
           <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 sm:flex sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -133,26 +183,18 @@ function HomePage() {
         </section>
 
         {/* Stats */}
-        <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <section className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <Stat label="Atendimentos hoje" value="0" icon={Calendar} />
           <Stat
-            label="Pagamentos pendentes"
-            value="R$ 0"
-            icon={Wallet}
-            tone="warning"
-            hint="Nenhuma pendência"
+            label="Pacientes Ativos"
+            value={String(activePatients)}
+            icon={Users}
           />
           <Stat
             label="Alertas de faltas"
             value="0"
             icon={AlertTriangle}
             hint="Sem pacientes em atenção"
-          />
-          <Stat
-            label="Recebido no mês"
-            value="R$ 0"
-            icon={TrendingUp}
-            tone="success"
           />
         </section>
 
@@ -183,33 +225,38 @@ function HomePage() {
           </div>
         </section>
 
-        {/* Resumo financeiro */}
+        {/* Anotações rápidas */}
         <section className="glass-card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold">Resumo financeiro</h2>
-              <p className="text-sm text-muted-foreground">Visão rápida do período.</p>
+              <h2 className="text-lg font-bold">Anotações rápidas</h2>
+              <p className="text-sm text-muted-foreground">
+                Registre lembretes ou observações do dia.
+              </p>
             </div>
-            <Link
-              to="/financas"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              Ver tudo
-            </Link>
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div>
-              <div className="text-xs text-muted-foreground">Atingido</div>
-              <div className="mt-1 text-xl font-bold">R$ 0</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Recebido</div>
-              <div className="mt-1 text-xl font-bold text-success">R$ 0</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Aguardando</div>
-              <div className="mt-1 text-xl font-bold text-warning">R$ 0</div>
-            </div>
+          <div className="mt-4">
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Ex: paciente reagendou, lembrar de confirmar pagamento, observação importante..."
+              className="min-h-[120px] resize-y bg-card/60"
+            />
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={handleSaveNotes}
+              className="rounded-lg gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground glow transition hover:opacity-90"
+            >
+              Salvar anotação
+            </button>
+            <button
+              onClick={handleClearNotes}
+              className="rounded-lg border border-input bg-card/60 px-5 py-2.5 text-sm font-semibold text-foreground transition hover:bg-accent"
+            >
+              Limpar
+            </button>
+            {saved && <span className="text-sm text-success">Salvo!</span>}
           </div>
         </section>
       </div>
