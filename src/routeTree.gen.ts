@@ -9,8 +9,44 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as FinancasRouteImport } from './routes/financas'
+import { Route as ConfirmarPagamentoRouteImport } from './routes/confirmar-pagamento'
+import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as AnaliseFaltasRouteImport } from './routes/analise-faltas'
+import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
 
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinancasRoute = FinancasRouteImport.update({
+  id: '/financas',
+  path: '/financas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfirmarPagamentoRoute = ConfirmarPagamentoRouteImport.update({
+  id: '/confirmar-pagamento',
+  path: '/confirmar-pagamento',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CadastroRoute = CadastroRouteImport.update({
+  id: '/cadastro',
+  path: '/cadastro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnaliseFaltasRoute = AnaliseFaltasRouteImport.update({
+  id: '/analise-faltas',
+  path: '/analise-faltas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaRoute = AgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +55,116 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
+  '/analise-faltas': typeof AnaliseFaltasRoute
+  '/cadastro': typeof CadastroRoute
+  '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
+  '/financas': typeof FinancasRoute
+  '/perfil': typeof PerfilRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
+  '/analise-faltas': typeof AnaliseFaltasRoute
+  '/cadastro': typeof CadastroRoute
+  '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
+  '/financas': typeof FinancasRoute
+  '/perfil': typeof PerfilRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
+  '/analise-faltas': typeof AnaliseFaltasRoute
+  '/cadastro': typeof CadastroRoute
+  '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
+  '/financas': typeof FinancasRoute
+  '/perfil': typeof PerfilRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/agenda'
+    | '/analise-faltas'
+    | '/cadastro'
+    | '/confirmar-pagamento'
+    | '/financas'
+    | '/perfil'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/agenda'
+    | '/analise-faltas'
+    | '/cadastro'
+    | '/confirmar-pagamento'
+    | '/financas'
+    | '/perfil'
+  id:
+    | '__root__'
+    | '/'
+    | '/agenda'
+    | '/analise-faltas'
+    | '/cadastro'
+    | '/confirmar-pagamento'
+    | '/financas'
+    | '/perfil'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgendaRoute: typeof AgendaRoute
+  AnaliseFaltasRoute: typeof AnaliseFaltasRoute
+  CadastroRoute: typeof CadastroRoute
+  ConfirmarPagamentoRoute: typeof ConfirmarPagamentoRoute
+  FinancasRoute: typeof FinancasRoute
+  PerfilRoute: typeof PerfilRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/financas': {
+      id: '/financas'
+      path: '/financas'
+      fullPath: '/financas'
+      preLoaderRoute: typeof FinancasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confirmar-pagamento': {
+      id: '/confirmar-pagamento'
+      path: '/confirmar-pagamento'
+      fullPath: '/confirmar-pagamento'
+      preLoaderRoute: typeof ConfirmarPagamentoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cadastro': {
+      id: '/cadastro'
+      path: '/cadastro'
+      fullPath: '/cadastro'
+      preLoaderRoute: typeof CadastroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analise-faltas': {
+      id: '/analise-faltas'
+      path: '/analise-faltas'
+      fullPath: '/analise-faltas'
+      preLoaderRoute: typeof AnaliseFaltasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda': {
+      id: '/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AgendaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,7 +177,23 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgendaRoute: AgendaRoute,
+  AnaliseFaltasRoute: AnaliseFaltasRoute,
+  CadastroRoute: CadastroRoute,
+  ConfirmarPagamentoRoute: ConfirmarPagamentoRoute,
+  FinancasRoute: FinancasRoute,
+  PerfilRoute: PerfilRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
