@@ -7,7 +7,9 @@ export type AppointmentStatus =
   | "agendado"
   | "realizado"
   | "falta"
+  | "falta-justificada"
   | "cancelado";
+export type DayStatus = "normal" | "folga";
 
 export type ClinicAttendanceType = {
   id: string;
@@ -31,12 +33,21 @@ export type Clinic = {
   createdAt: string;
 };
 
+export type PatientSchedule = {
+  id: string;
+  weekday: string;
+  time: string;
+  durationMinutes: number;
+};
+
 export type Patient = {
   id: string;
   name: string;
   phone?: string;
   email?: string;
   status: PatientStatus;
+  /** Dias e horários recorrentes de atendimento. */
+  schedules?: PatientSchedule[];
   /** Dia da semana do atendimento recorrente (0 domingo, 6 sábado). */
   weekDay?: string;
   /** Horário principal do atendimento recorrente (HH:mm). */
@@ -60,9 +71,12 @@ export type Patient = {
 export type Appointment = {
   id: string;
   patientId: string;
+  scheduleId?: string;
   clinicId?: string | null;
   /** ISO datetime de início. */
   startsAt: string;
+  /** Data original em yyyy-MM-dd, usada para remarcações. */
+  originalDate?: string;
   /** Duração em minutos. */
   durationMin: number;
   status: AppointmentStatus;
@@ -70,6 +84,29 @@ export type Appointment = {
   paid: boolean;
   /** Marcado como repasse confirmado à clínica. */
   repasseConfirmed: boolean;
+  absenceReason?: string;
   notes?: string;
   createdAt: string;
+  updatedAt?: string;
+};
+
+export type DayStatusRecord = {
+  date: string;
+  status: DayStatus;
+};
+
+export type VacationPeriod = {
+  id: string;
+  startsOn: string;
+  endsOn: string;
+};
+
+export type MonthlyPayment = {
+  id: string;
+  patientId: string;
+  month: string;
+  amountDue?: number;
+  amountReceived?: number;
+  status?: "pendente" | "parcial" | "pago";
+  paidAt: string;
 };

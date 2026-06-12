@@ -33,6 +33,7 @@ import type {
   Clinic,
   ClinicAttendanceType,
   Patient,
+  PatientSchedule,
   PaymentFrequency,
 } from "@/lib/store/types";
 
@@ -55,6 +56,13 @@ type ClinicDraft = {
   types: ClinicTypeDraft[];
 };
 
+type PatientScheduleDraft = {
+  id: string;
+  weekday: string;
+  time: string;
+  durationMinutes: string;
+};
+
 type PatientDraft = {
   id?: string;
   name: string;
@@ -62,8 +70,7 @@ type PatientDraft = {
   clinicId: string;
   attendanceTypeId: string;
   value: string;
-  weekDay: string;
-  time: string;
+  schedules: PatientScheduleDraft[];
   billingModel: PaymentFrequency;
   notes: string;
 };
@@ -82,6 +89,9 @@ const billingOptions: Array<{ value: PaymentFrequency; label: string }> = [
   { value: "sessao", label: "Por sessão" },
   { value: "mensal", label: "Mensal" },
 ];
+
+const durationOptions = [30, 45, 50, 60, 90, 120] as const;
+const DEFAULT_DURATION_MINUTES = 50;
 
 function uid() {
   return crypto.randomUUID();
@@ -115,6 +125,15 @@ function emptyClinicDraft(): ClinicDraft {
   };
 }
 
+function emptyScheduleDraft(): PatientScheduleDraft {
+  return {
+    id: uid(),
+    weekday: "",
+    time: "",
+    durationMinutes: String(DEFAULT_DURATION_MINUTES),
+  };
+}
+
 function emptyPatientDraft(): PatientDraft {
   return {
     name: "",
@@ -122,8 +141,7 @@ function emptyPatientDraft(): PatientDraft {
     clinicId: "",
     attendanceTypeId: "",
     value: "",
-    weekDay: "",
-    time: "",
+    schedules: [emptyScheduleDraft()],
     billingModel: "sessao",
     notes: "",
   };
@@ -155,6 +173,66 @@ function clinicTypeLabel(clinic: Clinic) {
 
 function dayLabel(value?: string) {
   return weekDays.find((day) => day.value === value)?.label ?? "—";
+}
+
+function normalizeDuration(value?: number | string) {
+  const duration = Number(value);
+  return Number.isFinite(duration) && duration > 0
+    ? duration
+    : DEFAULT_DURATION_MINUTES;
+}
+
+function normalizePatientSchedules(patient: Patient): PatientSchedule[] {
+  const schedules =
+    patient.schedules
+      ?.filter((schedule) => schedule.weekday && schedule.time)
+      .map((schedule) => ({
+        ...schedule,
+        durationMinutes: normalizeDuration(schedule.durationMinutes),
+      })) ?? [];
+  if (schedules.length) return schedules;
+  if (patient.weekDay && patient.time) {
+    return [
+      {
+        id: uid(),
+        weekday: patient.weekDay,
+        time: patient.time,
+        durationMinutes: DEFAULT_DURATION_MINUTES,
+      },
+    ];
+  }
+  return [];
+}
+
+function scheduleText(patient: Patient) {
+  const schedules = normalizePatientSchedules(patient);
+  if (!schedules.length) return "—";
+  return schedules
+    .map(
+      (schedule) =>
+        `${dayLabel(schedule.weekday)} ${schedule.time} (${schedule.durationMinutes} min)`,
+    )
+    .join(", ");
+}
+
+function timeToMinutes(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function rangesOverlap(
+  startA: number,
+  endA: number,
+  startB: number,
+  endB: number,
+) {
+  return startA < endB && endA > startB;
 }
 
 function billingLabel(value?: string) {
@@ -189,9 +267,8 @@ function CadastroPage() {
   const [clinicDraft, setClinicDraft] = useState<ClinicDraft>(() => emptyClinicDraft());
   const [patientDraft, setPatientDraft] = useState<PatientDraft>(() => emptyPatientDraft());
   const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState("clinicas");
   const [reactivateTarget, setReactivateTarget] = useState<Patient | null>(null);
-  const [reactivateWeekDay, setReactivateWeekDay] = useState("");
-  const [reactivateTime, setReactivateTime] = useState("");
 
   const activePatients = useMemo(
     () => patients.filter((patient) => patient.status === "ativo"),
@@ -313,10 +390,74 @@ function CadastroPage() {
     }));
   };
 
-  const resetPatientForm = () => setPatientDraft(emptyPatientDraft());
+  const resetPatientForm = () => {
+    setPatientDraft(emptyPatientDraft());
+    setReactivateTarget(null);
+  };
 
-  const editPatient = (patient: Patient) => {
+  const updatePatientSchedule = (
+    id: string,
+    patch: Partial<PatientScheduleDraft>,
+  ) => {
+    setPatientDraft((draft) => ({
+      ...draft,
+      schedules: draft.schedules.map((schedule) =>
+        schedule.id === id ? { ...schedule, ...patch } : schedule,
+      ),
+    }));
+  };
+
+  const addPatientSchedule = () => {
+    setPatientDraft((draft) => ({
+      ...draft,
+      schedules: [...draft.schedules, emptyScheduleDraft()],
+    }));
+  };
+
+  const removePatientSchedule = (id: string) => {
+    setPatientDraft((draft) => {
+      if (draft.schedules.length === 1) return draft;
+      return {
+        ...draft,
+        schedules: draft.schedules.filter((schedule) => schedule.id !== id),
+      };
+    });
+  };
+
+  const findScheduleConflict = (
+    schedules: PatientSchedule[],
+    currentPatientId?: string,
+  ) => {
+    for (const schedule of schedules) {
+      const newStart = timeToMinutes(schedule.time);
+      const newEnd = newStart + schedule.durationMinutes;
+
+      for (const patient of patients) {
+        if (patient.status !== "ativo" || patient.id === currentPatientId) continue;
+
+        for (const existingSchedule of normalizePatientSchedules(patient)) {
+          if (existingSchedule.weekday !== schedule.weekday) continue;
+
+          const existingStart = timeToMinutes(existingSchedule.time);
+          const existingEnd = existingStart + existingSchedule.durationMinutes;
+
+          if (rangesOverlap(newStart, newEnd, existingStart, existingEnd)) {
+            return {
+              patientName: patient.name,
+              startsAt: existingSchedule.time,
+              endsAt: minutesToTime(existingEnd),
+            };
+          }
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const fillPatientDraft = (patient: Patient) => {
     const origin: PatientOrigin = patient.paymentType === "clinica" ? "clinica" : "particular";
+    const schedules = normalizePatientSchedules(patient);
     setPatientDraft({
       id: patient.id,
       name: patient.name,
@@ -324,15 +465,24 @@ function CadastroPage() {
       clinicId: patient.clinicId ?? "",
       attendanceTypeId: patient.attendanceTypeId ?? "",
       value: typeValueText(patient.sessionValue),
-      weekDay: patient.weekDay ?? "",
-      time: patient.time ?? "",
+      schedules: schedules.length
+        ? schedules.map((schedule) => ({
+            ...schedule,
+            durationMinutes: String(schedule.durationMinutes),
+          }))
+        : [emptyScheduleDraft()],
       billingModel: normalizeBillingModel(patient.paymentFrequency),
       notes: patient.notes ?? "",
     });
+  };
+
+  const editPatient = (patient: Patient) => {
+    fillPatientDraft(patient);
+    setReactivateTarget(null);
     setMessage("");
   };
 
-  const submitPatient = () => {
+  const submitPatient = ({ reactivate = false } = {}) => {
     const name = patientDraft.name.trim();
     const value = parseMoney(patientDraft.value);
 
@@ -344,8 +494,23 @@ function CadastroPage() {
       setMessage("Informe a origem do paciente.");
       return;
     }
-    if (!patientDraft.weekDay || !patientDraft.time) {
-      setMessage("Informe dia da semana e horário.");
+    const schedules = patientDraft.schedules.map((schedule) => ({
+      id: schedule.id,
+      weekday: schedule.weekday,
+      time: schedule.time,
+      durationMinutes: Number(schedule.durationMinutes),
+    }));
+    if (
+      !schedules.length ||
+      schedules.some(
+        (schedule) =>
+          !schedule.weekday ||
+          !schedule.time ||
+          !Number.isFinite(schedule.durationMinutes) ||
+          schedule.durationMinutes <= 0,
+      )
+    ) {
+      setMessage("Informe pelo menos um dia, horário e duração válidos.");
       return;
     }
     if (patientDraft.origin === "clinica" && (!patientDraft.clinicId || !patientDraft.attendanceTypeId)) {
@@ -366,15 +531,24 @@ function CadastroPage() {
     const selectedType = selectedClinic
       ? normalizeClinicTypes(selectedClinic).find((type) => type.id === patientDraft.attendanceTypeId)
       : undefined;
+    const conflict = findScheduleConflict(schedules, existing?.id);
+
+    if (conflict) {
+      const detail = `Esse horário está ocupado por ${conflict.patientName} das ${conflict.startsAt} às ${conflict.endsAt}. Escolha outro horário.`;
+      setMessage("Já existe um paciente cadastrado neste dia e horário. " + detail);
+      window.alert(`Já existe um paciente cadastrado neste dia e horário.\n\n${detail}`);
+      return;
+    }
 
     const patient: Patient = {
       id: existing?.id ?? uid(),
       name,
       phone: existing?.phone,
       email: existing?.email,
-      status: existing?.status ?? "ativo",
-      weekDay: patientDraft.weekDay,
-      time: patientDraft.time,
+      status: reactivate ? "ativo" : (existing?.status ?? "ativo"),
+      schedules,
+      weekDay: schedules[0]?.weekday,
+      time: schedules[0]?.time,
       clinicId: patientDraft.origin === "clinica" ? patientDraft.clinicId : null,
       attendanceTypeId: patientDraft.origin === "clinica" ? patientDraft.attendanceTypeId : null,
       attendanceTypeName: patientDraft.origin === "clinica" ? selectedType?.name : undefined,
@@ -383,15 +557,23 @@ function CadastroPage() {
       sessionValue: value,
       notes: patientDraft.notes.trim() || undefined,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
-      closedAt: existing?.closedAt,
+      closedAt: reactivate ? undefined : existing?.closedAt,
     };
 
     const next = existing
       ? patients.map((item) => (item.id === patient.id ? patient : item))
       : [...patients, patient];
 
-    persistPatients(next, existing ? "Paciente atualizado." : "Paciente cadastrado.");
+    persistPatients(
+      next,
+      reactivate
+        ? "Paciente reativado."
+        : existing
+          ? "Paciente atualizado."
+          : "Paciente cadastrado.",
+    );
     resetPatientForm();
+    if (reactivate) setActiveTab("pacientes");
   };
 
   const closePatient = (patientId: string) => {
@@ -413,32 +595,13 @@ function CadastroPage() {
 
   const startReactivate = (patient: Patient) => {
     setReactivateTarget(patient);
-    setReactivateWeekDay(patient.weekDay ?? "");
-    setReactivateTime(patient.time ?? "");
+    fillPatientDraft(patient);
     setMessage("");
   };
 
   const confirmReactivate = () => {
     if (!reactivateTarget) return;
-    if (!reactivateWeekDay || !reactivateTime) {
-      setMessage("Informe novo dia e horário para reativar.");
-      return;
-    }
-    const next = patients.map((patient) =>
-      patient.id === reactivateTarget.id
-        ? {
-            ...patient,
-            status: "ativo" as const,
-            weekDay: reactivateWeekDay,
-            time: reactivateTime,
-            closedAt: undefined,
-          }
-        : patient,
-    );
-    persistPatients(next, "Paciente reativado.");
-    setReactivateTarget(null);
-    setReactivateWeekDay("");
-    setReactivateTime("");
+    submitPatient({ reactivate: true });
   };
 
   const selectedPatientClinic = clinics.find((clinic) => clinic.id === patientDraft.clinicId);
@@ -467,7 +630,7 @@ function CadastroPage() {
           </div>
         )}
 
-        <Tabs defaultValue="clinicas" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto">
             <TabsTrigger value="clinicas">Clínicas</TabsTrigger>
             <TabsTrigger value="pacientes">Pacientes</TabsTrigger>
@@ -731,7 +894,7 @@ function CadastroPage() {
                     </Field>
                   )}
 
-                  <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-4">
                     <Field label="Valor">
                       <Input
                         value={patientDraft.value}
@@ -742,34 +905,90 @@ function CadastroPage() {
                         inputMode="decimal"
                       />
                     </Field>
-                    <Field label="Dia">
-                      <Select
-                        value={patientDraft.weekDay}
-                        onValueChange={(value) =>
-                          setPatientDraft((draft) => ({ ...draft, weekDay: value }))
-                        }
+                  </div>
+
+                  <div className="grid gap-3 rounded-lg border border-border bg-card/40 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Dias e horários de atendimento
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addPatientSchedule}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Dia" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {weekDays.map((day) => (
-                            <SelectItem key={day.value} value={day.value}>
-                              {day.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="Horário">
-                      <Input
-                        type="time"
-                        value={patientDraft.time}
-                        onChange={(event) =>
-                          setPatientDraft((draft) => ({ ...draft, time: event.target.value }))
-                        }
-                      />
-                    </Field>
+                        <Plus className="h-4 w-4" /> Adicionar dia
+                      </Button>
+                    </div>
+
+                    {patientDraft.schedules.map((schedule) => (
+                      <div
+                        key={schedule.id}
+                        className="grid gap-2 rounded-lg border border-border bg-card/40 p-3 sm:grid-cols-[1fr,130px,150px,40px]"
+                      >
+                        <Field label="Dia da semana">
+                          <Select
+                            value={schedule.weekday}
+                            onValueChange={(value) =>
+                              updatePatientSchedule(schedule.id, { weekday: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Dia" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {weekDays.map((day) => (
+                                <SelectItem key={day.value} value={day.value}>
+                                  {day.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Field label="Horário">
+                          <Input
+                            type="time"
+                            value={schedule.time}
+                            onChange={(event) =>
+                              updatePatientSchedule(schedule.id, { time: event.target.value })
+                            }
+                          />
+                        </Field>
+                        <Field label="Duração do atendimento">
+                          <Select
+                            value={schedule.durationMinutes}
+                            onValueChange={(value) =>
+                              updatePatientSchedule(schedule.id, {
+                                durationMinutes: value,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Duração" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {durationOptions.map((duration) => (
+                                <SelectItem key={duration} value={String(duration)}>
+                                  {duration} minutos
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={patientDraft.schedules.length === 1}
+                          onClick={() => removePatientSchedule(schedule.id)}
+                          aria-label="Remover dia"
+                          className="self-end"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
 
                   <Field label="Observações">
@@ -808,35 +1027,216 @@ function CadastroPage() {
                     <div>
                       <h2 className="text-lg font-bold">Reativar {reactivateTarget.name}</h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Informe o novo dia e horário antes de voltar o paciente para ativos.
+                        Revise o cadastro completo antes de voltar o paciente para ativos.
                       </p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setReactivateTarget(null)}>
+                    <Button variant="ghost" size="sm" onClick={resetPatientForm}>
                       <X className="h-4 w-4" /> Cancelar
                     </Button>
                   </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-[1fr,160px,auto] sm:items-end">
-                    <Field label="Novo dia">
-                      <Select value={reactivateWeekDay} onValueChange={setReactivateWeekDay}>
+
+                  <div className="mt-4 grid gap-4">
+                    <Field label="Nome">
+                      <Input
+                        value={patientDraft.name}
+                        onChange={(event) =>
+                          setPatientDraft((draft) => ({ ...draft, name: event.target.value }))
+                        }
+                        placeholder="Nome do paciente"
+                      />
+                    </Field>
+
+                    <Field label="Origem">
+                      <Select
+                        value={patientDraft.origin}
+                        onValueChange={(value) =>
+                          setPatientDraft((draft) => ({
+                            ...draft,
+                            origin: value as PatientOrigin,
+                            clinicId: value === "particular" ? "" : draft.clinicId,
+                            attendanceTypeId: value === "particular" ? "" : draft.attendanceTypeId,
+                            billingModel: "sessao",
+                          }))
+                        }
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Dia" />
+                          <SelectValue placeholder="Selecione" />
                         </SelectTrigger>
                         <SelectContent>
-                          {weekDays.map((day) => (
-                            <SelectItem key={day.value} value={day.value}>
-                              {day.label}
-                            </SelectItem>
-                          ))}
+                          <SelectItem value="clinica">Clínica</SelectItem>
+                          <SelectItem value="particular">Particular</SelectItem>
                         </SelectContent>
                       </Select>
                     </Field>
-                    <Field label="Novo horário">
+
+                    {patientDraft.origin === "clinica" && (
+                      <div className="grid gap-4 rounded-lg border border-border bg-card/40 p-3">
+                        <Field label="Clínica">
+                          <Select value={patientDraft.clinicId} onValueChange={onClinicSelect}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {clinics.map((clinic) => (
+                                <SelectItem key={clinic.id} value={clinic.id}>
+                                  {clinic.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                        <Field label="Tipo de atendimento">
+                          <Select
+                            value={patientDraft.attendanceTypeId}
+                            onValueChange={onClinicTypeSelect}
+                            disabled={!patientDraft.clinicId}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {selectedPatientTypes.map((type) => (
+                                <SelectItem key={type.id} value={type.id}>
+                                  {type.name} · {money(type.value)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+                      </div>
+                    )}
+
+                    {patientDraft.origin === "particular" && (
+                      <Field label="Modelo de cobrança">
+                        <Select
+                          value={patientDraft.billingModel}
+                          onValueChange={(value) =>
+                            setPatientDraft((draft) => ({
+                              ...draft,
+                              billingModel: normalizeBillingModel(value),
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {billingOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                    )}
+
+                    <Field label="Valor">
                       <Input
-                        type="time"
-                        value={reactivateTime}
-                        onChange={(event) => setReactivateTime(event.target.value)}
+                        value={patientDraft.value}
+                        onChange={(event) =>
+                          setPatientDraft((draft) => ({ ...draft, value: event.target.value }))
+                        }
+                        placeholder="Valor"
+                        inputMode="decimal"
                       />
                     </Field>
+
+                    <div className="grid gap-3 rounded-lg border border-border bg-card/40 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Dias e horários de atendimento
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={addPatientSchedule}
+                        >
+                          <Plus className="h-4 w-4" /> Adicionar dia
+                        </Button>
+                      </div>
+
+                      {patientDraft.schedules.map((schedule) => (
+                        <div
+                          key={schedule.id}
+                          className="grid gap-2 rounded-lg border border-border bg-card/40 p-3 sm:grid-cols-[1fr,130px,150px,40px]"
+                        >
+                          <Field label="Dia da semana">
+                            <Select
+                              value={schedule.weekday}
+                              onValueChange={(value) =>
+                                updatePatientSchedule(schedule.id, { weekday: value })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Dia" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {weekDays.map((day) => (
+                                  <SelectItem key={day.value} value={day.value}>
+                                    {day.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Field label="Horário">
+                            <Input
+                              type="time"
+                              value={schedule.time}
+                              onChange={(event) =>
+                                updatePatientSchedule(schedule.id, { time: event.target.value })
+                              }
+                            />
+                          </Field>
+                          <Field label="Duração do atendimento">
+                            <Select
+                              value={schedule.durationMinutes}
+                              onValueChange={(value) =>
+                                updatePatientSchedule(schedule.id, {
+                                  durationMinutes: value,
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Duração" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {durationOptions.map((duration) => (
+                                  <SelectItem key={duration} value={String(duration)}>
+                                    {duration} minutos
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={patientDraft.schedules.length === 1}
+                            onClick={() => removePatientSchedule(schedule.id)}
+                            aria-label="Remover dia"
+                            className="self-end"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Field label="Observações">
+                      <textarea
+                        value={patientDraft.notes}
+                        onChange={(event) =>
+                          setPatientDraft((draft) => ({ ...draft, notes: event.target.value }))
+                        }
+                        className="min-h-24 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        placeholder="Observações clínicas ou administrativas"
+                      />
+                    </Field>
+
                     <Button onClick={confirmReactivate}>
                       <RotateCcw className="h-4 w-4" /> Reativar
                     </Button>
@@ -926,8 +1326,7 @@ function PatientList({
               </div>
             </div>
             <div className="mt-3 grid gap-2">
-              <MobileField label="Dia" value={dayLabel(patient.weekDay)} />
-              <MobileField label="Horário" value={patient.time ?? "—"} />
+              <MobileField label="Dias/horários" value={scheduleText(patient)} />
               <MobileField label="Tipo" value={patientType(patient)} />
               <MobileField label="Origem" value={clinicName(patient)} />
               <MobileField label="Valor" value={money(patient.sessionValue)} />
@@ -941,8 +1340,7 @@ function PatientList({
           <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-4 py-3">Nome</th>
-              <th className="w-28 px-4 py-3">Dia</th>
-              <th className="w-24 px-4 py-3">Horário</th>
+              <th className="px-4 py-3">Dias e horários</th>
               <th className="px-4 py-3">Tipo</th>
               <th className="px-4 py-3">Clínica/Particular</th>
               <th className="w-28 px-4 py-3">Valor</th>
@@ -953,8 +1351,7 @@ function PatientList({
             {patients.map((patient) => (
               <tr key={patient.id} className="border-b border-border/70 last:border-0">
                 <td className="px-4 py-3 font-medium">{patient.name}</td>
-                <td className="px-4 py-3">{dayLabel(patient.weekDay)}</td>
-                <td className="px-4 py-3">{patient.time ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{scheduleText(patient)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{patientType(patient)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{clinicName(patient)}</td>
                 <td className="px-4 py-3 tabular-nums">{money(patient.sessionValue)}</td>
