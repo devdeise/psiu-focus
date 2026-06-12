@@ -12,6 +12,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { addQuickNote } from "@/lib/notes-store";
+import {
+  countAbsences,
+  getActivePatients,
+  getAppointmentsToday,
+  getNextAppointment,
+  getPatients,
+} from "@/lib/store";
+import type { Appointment } from "@/lib/store/types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
