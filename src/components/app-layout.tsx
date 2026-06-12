@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   UserPlus,
   UserCircle,
+  NotebookPen,
   Menu,
   X,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { to: "/", label: "Home", icon: Home },
   { to: "/agenda", label: "Agenda", icon: Calendar },
+  { to: "/anotacoes", label: "Anotações", icon: NotebookPen },
   { to: "/financas", label: "Finanças", icon: Wallet },
   { to: "/confirmar-pagamento", label: "Confirmar Pagamento", icon: CheckCircle2 },
   { to: "/analise-faltas", label: "Análise de Faltas", icon: AlertTriangle },
