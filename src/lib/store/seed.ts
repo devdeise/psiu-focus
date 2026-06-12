@@ -4,7 +4,7 @@ import {
   saveClinics,
   savePatients,
 } from "./index";
-import type { Appointment, Clinic, Patient } from "./types";
+import type { Appointment, Clinic, ClinicAttendanceType, Patient } from "./types";
 
 function uid() {
   return crypto.randomUUID();
@@ -17,6 +17,10 @@ function atTime(daysFromToday: number, hour: number, minute = 0) {
   return d.toISOString();
 }
 
+function clinicTypes(items: Array<{ name: string; value: number }>): ClinicAttendanceType[] {
+  return items.map((item) => ({ id: uid(), ...item }));
+}
+
 /**
  * Popula o store local com dados de exemplo apenas na primeira vez.
  * Idempotente: respeita a flag psiu:store:seeded.
@@ -27,20 +31,31 @@ export function ensureSeed() {
 
   const now = new Date().toISOString();
 
+  const clinicATypes = clinicTypes([
+    { name: "Terapia ABA", value: 200 },
+    { name: "Psicoterapia infantil", value: 180 },
+  ]);
+  const clinicBTypes = clinicTypes([
+    { name: "Psicoterapia", value: 180 },
+    { name: "Avaliação", value: 240 },
+  ]);
+
   const clinicA: Clinic = {
     id: uid(),
     name: "Clínica Bem-Estar",
+    attendanceTypes: clinicATypes,
     repassePercent: 30,
-    defaultSessionValue: 200,
-    paymentTypes: ["clinica", "convenio"],
+    defaultSessionValue: clinicATypes[0].value,
+    paymentTypes: ["clinica"],
     notes: "Repasse mensal no dia 10.",
     createdAt: now,
   };
   const clinicB: Clinic = {
     id: uid(),
     name: "Espaço Equilíbrio",
+    attendanceTypes: clinicBTypes,
     repassePercent: 25,
-    defaultSessionValue: 180,
+    defaultSessionValue: clinicBTypes[0].value,
     paymentTypes: ["clinica"],
     createdAt: now,
   };
@@ -51,6 +66,8 @@ export function ensureSeed() {
       name: "Ana Lima",
       phone: "(11) 99999-1111",
       status: "ativo",
+      weekDay: "1",
+      time: "09:00",
       clinicId: null,
       paymentType: "particular",
       paymentFrequency: "sessao",
@@ -62,6 +79,8 @@ export function ensureSeed() {
       name: "Bruno Souza",
       phone: "(11) 99999-2222",
       status: "ativo",
+      weekDay: "2",
+      time: "11:00",
       clinicId: null,
       paymentType: "particular",
       paymentFrequency: "mensal",
@@ -73,10 +92,14 @@ export function ensureSeed() {
       name: "Carla Mendes",
       phone: "(11) 99999-3333",
       status: "ativo",
+      weekDay: "3",
+      time: "15:00",
       clinicId: clinicA.id,
+      attendanceTypeId: clinicATypes[0].id,
+      attendanceTypeName: clinicATypes[0].name,
       paymentType: "clinica",
       paymentFrequency: "sessao",
-      sessionValue: 200,
+      sessionValue: clinicATypes[0].value,
       createdAt: now,
     },
     {
@@ -84,21 +107,28 @@ export function ensureSeed() {
       name: "Diego Faria",
       phone: "(11) 99999-4444",
       status: "ativo",
+      weekDay: "4",
+      time: "10:00",
       clinicId: clinicB.id,
+      attendanceTypeId: clinicBTypes[0].id,
+      attendanceTypeName: clinicBTypes[0].name,
       paymentType: "clinica",
       paymentFrequency: "sessao",
-      sessionValue: 180,
+      sessionValue: clinicBTypes[0].value,
       createdAt: now,
     },
     {
       id: uid(),
       name: "Elisa Prado",
       status: "encerrado",
+      weekDay: "5",
+      time: "14:00",
       clinicId: null,
       paymentType: "particular",
       paymentFrequency: "sessao",
       sessionValue: 220,
       createdAt: now,
+      closedAt: now,
     },
   ];
 
