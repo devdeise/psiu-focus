@@ -8,7 +8,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
@@ -64,7 +64,7 @@ type PatientDraft = {
   value: string;
   weekDay: string;
   time: string;
-  billingModel: PaymentFrequency | "";
+  billingModel: PaymentFrequency;
   notes: string;
 };
 
@@ -80,8 +80,6 @@ const weekDays = [
 
 const billingOptions: Array<{ value: PaymentFrequency; label: string }> = [
   { value: "sessao", label: "Por sessão" },
-  { value: "semanal", label: "Semanal" },
-  { value: "quinzenal", label: "Quinzenal" },
   { value: "mensal", label: "Mensal" },
 ];
 
@@ -131,6 +129,10 @@ function emptyPatientDraft(): PatientDraft {
   };
 }
 
+function normalizeBillingModel(value?: string): PaymentFrequency {
+  return value === "mensal" ? "mensal" : "sessao";
+}
+
 function normalizeClinicTypes(clinic: Clinic): ClinicAttendanceType[] {
   if (clinic.attendanceTypes?.length) return clinic.attendanceTypes;
   if (clinic.defaultSessionValue) {
@@ -155,17 +157,11 @@ function dayLabel(value?: string) {
   return weekDays.find((day) => day.value === value)?.label ?? "—";
 }
 
-function billingLabel(value?: PaymentFrequency) {
-  return billingOptions.find((item) => item.value === value)?.label ?? "—";
+function billingLabel(value?: string) {
+  return billingOptions.find((item) => item.value === normalizeBillingModel(value))?.label ?? "—";
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-1.5 text-sm">
       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -288,8 +284,10 @@ function CadastroPage() {
   };
 
   const removeClinic = (clinicId: string) => {
-    const next = clinics.filter((clinic) => clinic.id !== clinicId);
-    persistClinics(next, "Clínica excluída.");
+    persistClinics(
+      clinics.filter((clinic) => clinic.id !== clinicId),
+      "Clínica excluída.",
+    );
   };
 
   const onClinicSelect = (clinicId: string) => {
@@ -328,7 +326,7 @@ function CadastroPage() {
       value: typeValueText(patient.sessionValue),
       weekDay: patient.weekDay ?? "",
       time: patient.time ?? "",
-      billingModel: patient.paymentFrequency,
+      billingModel: normalizeBillingModel(patient.paymentFrequency),
       notes: patient.notes ?? "",
     });
     setMessage("");
@@ -350,13 +348,11 @@ function CadastroPage() {
       setMessage("Informe dia da semana e horário.");
       return;
     }
-    if (patientDraft.origin === "clinica") {
-      if (!patientDraft.clinicId || !patientDraft.attendanceTypeId) {
-        setMessage("Selecione a clínica e o tipo de atendimento.");
-        return;
-      }
+    if (patientDraft.origin === "clinica" && (!patientDraft.clinicId || !patientDraft.attendanceTypeId)) {
+      setMessage("Selecione a clínica e o tipo de atendimento.");
+      return;
     }
-    if (patientDraft.origin === "particular" && (!patientDraft.billingModel || value <= 0)) {
+    if (patientDraft.origin === "particular" && value <= 0) {
       setMessage("Paciente particular precisa de modelo de cobrança e valor.");
       return;
     }
@@ -383,8 +379,7 @@ function CadastroPage() {
       attendanceTypeId: patientDraft.origin === "clinica" ? patientDraft.attendanceTypeId : null,
       attendanceTypeName: patientDraft.origin === "clinica" ? selectedType?.name : undefined,
       paymentType: patientDraft.origin,
-      paymentFrequency:
-        patientDraft.origin === "particular" ? (patientDraft.billingModel as PaymentFrequency) : "sessao",
+      paymentFrequency: patientDraft.origin === "particular" ? patientDraft.billingModel : "sessao",
       sessionValue: value,
       notes: patientDraft.notes.trim() || undefined,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
@@ -409,12 +404,11 @@ function CadastroPage() {
   };
 
   const deletePatient = (patientId: string) => {
-    const nextPatients = patients.filter((patient) => patient.id !== patientId);
-    const nextAppointments = getAppointments().filter(
-      (appointment) => appointment.patientId !== patientId,
+    saveAppointments(getAppointments().filter((appointment) => appointment.patientId !== patientId));
+    persistPatients(
+      patients.filter((patient) => patient.id !== patientId),
+      "Paciente excluído.",
     );
-    saveAppointments(nextAppointments);
-    persistPatients(nextPatients, "Paciente excluído.");
   };
 
   const startReactivate = (patient: Patient) => {
@@ -661,8 +655,7 @@ function CadastroPage() {
                           origin: value as PatientOrigin,
                           clinicId: value === "particular" ? "" : draft.clinicId,
                           attendanceTypeId: value === "particular" ? "" : draft.attendanceTypeId,
-                          value: value === "clinica" ? draft.value : draft.value,
-                          billingModel: value === "particular" ? draft.billingModel || "sessao" : "sessao",
+                          billingModel: "sessao",
                         }))
                       }
                     >
@@ -720,7 +713,7 @@ function CadastroPage() {
                         onValueChange={(value) =>
                           setPatientDraft((draft) => ({
                             ...draft,
-                            billingModel: value as PaymentFrequency,
+                            billingModel: normalizeBillingModel(value),
                           }))
                         }
                       >
