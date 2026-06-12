@@ -187,10 +187,14 @@ function HomePage() {
                 Próximo atendimento
               </div>
               <div className="mt-2 text-xl font-bold sm:text-2xl">
-                Nenhum atendimento agendado
+                {next
+                  ? `${nextPatientName} — ${new Date(next.startsAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                  : "Nenhum atendimento agendado"}
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                Cadastre pacientes para começar a montar sua agenda.
+                {next
+                  ? `${next.durationMin} min${next.clinicId ? " · em clínica" : " · particular"}`
+                  : "Cadastre pacientes para começar a montar sua agenda."}
               </div>
             </div>
             <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-card/60 text-foreground">
@@ -201,7 +205,7 @@ function HomePage() {
 
         {/* Stats */}
         <section className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          <Stat label="Atendimentos hoje" value="0" icon={Calendar} />
+          <Stat label="Atendimentos hoje" value={String(todayCount)} icon={Calendar} />
           <Stat
             label="Pacientes Ativos"
             value={String(activePatients)}
@@ -209,9 +213,10 @@ function HomePage() {
           />
           <Stat
             label="Alertas de faltas"
-            value="0"
+            value={String(absences)}
             icon={AlertTriangle}
-            hint="Sem pacientes em atenção"
+            tone={absences > 0 ? "warning" : "default"}
+            hint={absences > 0 ? "Revise pacientes com faltas" : "Sem pacientes em atenção"}
           />
         </section>
 
