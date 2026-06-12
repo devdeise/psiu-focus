@@ -1,7 +1,7 @@
 // Tipos centrais do PSIU! (frontend-only, persistidos em localStorage)
 
 export type PaymentType = "particular" | "convenio" | "clinica";
-export type PaymentFrequency = "sessao" | "semanal" | "quinzenal" | "mensal";
+export type PaymentFrequency = "sessao" | "mensal";
 export type PatientStatus = "ativo" | "encerrado";
 export type AppointmentStatus =
   | "agendado"
