@@ -13,6 +13,7 @@ import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as FinancasRouteImport } from './routes/financas'
 import { Route as ConfirmarPagamentoRouteImport } from './routes/confirmar-pagamento'
 import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as AnotacoesRouteImport } from './routes/anotacoes'
 import { Route as AnaliseFaltasRouteImport } from './routes/analise-faltas'
 import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
@@ -37,6 +38,11 @@ const CadastroRoute = CadastroRouteImport.update({
   path: '/cadastro',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnotacoesRoute = AnotacoesRouteImport.update({
+  id: '/anotacoes',
+  path: '/anotacoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnaliseFaltasRoute = AnaliseFaltasRouteImport.update({
   id: '/analise-faltas',
   path: '/analise-faltas',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/analise-faltas': typeof AnaliseFaltasRoute
+  '/anotacoes': typeof AnotacoesRoute
   '/cadastro': typeof CadastroRoute
   '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
   '/financas': typeof FinancasRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/analise-faltas': typeof AnaliseFaltasRoute
+  '/anotacoes': typeof AnotacoesRoute
   '/cadastro': typeof CadastroRoute
   '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
   '/financas': typeof FinancasRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
   '/analise-faltas': typeof AnaliseFaltasRoute
+  '/anotacoes': typeof AnotacoesRoute
   '/cadastro': typeof CadastroRoute
   '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
   '/financas': typeof FinancasRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agenda'
     | '/analise-faltas'
+    | '/anotacoes'
     | '/cadastro'
     | '/confirmar-pagamento'
     | '/financas'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agenda'
     | '/analise-faltas'
+    | '/anotacoes'
     | '/cadastro'
     | '/confirmar-pagamento'
     | '/financas'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agenda'
     | '/analise-faltas'
+    | '/anotacoes'
     | '/cadastro'
     | '/confirmar-pagamento'
     | '/financas'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgendaRoute: typeof AgendaRoute
   AnaliseFaltasRoute: typeof AnaliseFaltasRoute
+  AnotacoesRoute: typeof AnotacoesRoute
   CadastroRoute: typeof CadastroRoute
   ConfirmarPagamentoRoute: typeof ConfirmarPagamentoRoute
   FinancasRoute: typeof FinancasRoute
@@ -151,6 +164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CadastroRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/anotacoes': {
+      id: '/anotacoes'
+      path: '/anotacoes'
+      fullPath: '/anotacoes'
+      preLoaderRoute: typeof AnotacoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/analise-faltas': {
       id: '/analise-faltas'
       path: '/analise-faltas'
@@ -179,6 +199,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgendaRoute: AgendaRoute,
   AnaliseFaltasRoute: AnaliseFaltasRoute,
+  AnotacoesRoute: AnotacoesRoute,
   CadastroRoute: CadastroRoute,
   ConfirmarPagamentoRoute: ConfirmarPagamentoRoute,
   FinancasRoute: FinancasRoute,

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
+import { addQuickNote } from "@/lib/notes-store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -132,7 +133,11 @@ function HomePage() {
   }, []);
 
   const handleSaveNotes = () => {
-    saveNotes(notes);
+    const text = notes.trim();
+    if (!text) return;
+    saveNotes("");
+    addQuickNote(text);
+    setNotes("");
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
