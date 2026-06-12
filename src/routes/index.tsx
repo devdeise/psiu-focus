@@ -12,6 +12,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { addQuickNote } from "@/lib/notes-store";
+import {
+  countAbsences,
+  getActivePatients,
+  getAppointmentsToday,
+  getNextAppointment,
+  getPatients,
+} from "@/lib/store";
+import type { Appointment } from "@/lib/store/types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -114,21 +122,25 @@ function HomePage() {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const [activePatients, setActivePatients] = useState(0);
+  const [todayCount, setTodayCount] = useState(0);
+  const [absences, setAbsences] = useState(0);
+  const [next, setNext] = useState<Appointment | null>(null);
+  const [nextPatientName, setNextPatientName] = useState<string>("");
 
   useEffect(() => {
     const hour = new Date().getHours();
     setGreeting(hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite");
     setNotes(loadNotes());
 
-    try {
-      const raw = window.localStorage.getItem("psiu:patients");
-      if (raw) {
-        const patients = JSON.parse(raw) as Array<{ status?: string }>;
-        const count = patients.filter((p) => p.status !== "encerrado").length;
-        setActivePatients(count);
-      }
-    } catch {
-      setActivePatients(0);
+    setActivePatients(getActivePatients().length);
+    setTodayCount(getAppointmentsToday().length);
+    setAbsences(countAbsences());
+
+    const upcoming = getNextAppointment();
+    setNext(upcoming);
+    if (upcoming) {
+      const patient = getPatients().find((p) => p.id === upcoming.patientId);
+      setNextPatientName(patient?.name ?? "Paciente");
     }
   }, []);
 
@@ -175,10 +187,14 @@ function HomePage() {
                 Próximo atendimento
               </div>
               <div className="mt-2 text-xl font-bold sm:text-2xl">
-                Nenhum atendimento agendado
+                {next
+                  ? `${nextPatientName} — ${new Date(next.startsAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                  : "Nenhum atendimento agendado"}
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                Cadastre pacientes para começar a montar sua agenda.
+                {next
+                  ? `${next.durationMin} min${next.clinicId ? " · em clínica" : " · particular"}`
+                  : "Cadastre pacientes para começar a montar sua agenda."}
               </div>
             </div>
             <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-card/60 text-foreground">
@@ -189,7 +205,7 @@ function HomePage() {
 
         {/* Stats */}
         <section className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-          <Stat label="Atendimentos hoje" value="0" icon={Calendar} />
+          <Stat label="Atendimentos hoje" value={String(todayCount)} icon={Calendar} />
           <Stat
             label="Pacientes Ativos"
             value={String(activePatients)}
@@ -197,9 +213,10 @@ function HomePage() {
           />
           <Stat
             label="Alertas de faltas"
-            value="0"
+            value={String(absences)}
             icon={AlertTriangle}
-            hint="Sem pacientes em atenção"
+            tone={absences > 0 ? "warning" : "default"}
+            hint={absences > 0 ? "Revise pacientes com faltas" : "Sem pacientes em atenção"}
           />
         </section>
 
