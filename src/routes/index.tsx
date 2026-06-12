@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
+import { addQuickNote } from "@/lib/notes-store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
