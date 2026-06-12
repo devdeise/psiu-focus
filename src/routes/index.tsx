@@ -122,21 +122,25 @@ function HomePage() {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const [activePatients, setActivePatients] = useState(0);
+  const [todayCount, setTodayCount] = useState(0);
+  const [absences, setAbsences] = useState(0);
+  const [next, setNext] = useState<Appointment | null>(null);
+  const [nextPatientName, setNextPatientName] = useState<string>("");
 
   useEffect(() => {
     const hour = new Date().getHours();
     setGreeting(hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite");
     setNotes(loadNotes());
 
-    try {
-      const raw = window.localStorage.getItem("psiu:patients");
-      if (raw) {
-        const patients = JSON.parse(raw) as Array<{ status?: string }>;
-        const count = patients.filter((p) => p.status !== "encerrado").length;
-        setActivePatients(count);
-      }
-    } catch {
-      setActivePatients(0);
+    setActivePatients(getActivePatients().length);
+    setTodayCount(getAppointmentsToday().length);
+    setAbsences(countAbsences());
+
+    const upcoming = getNextAppointment();
+    setNext(upcoming);
+    if (upcoming) {
+      const patient = getPatients().find((p) => p.id === upcoming.patientId);
+      setNextPatientName(patient?.name ?? "Paciente");
     }
   }, []);
 
