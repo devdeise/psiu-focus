@@ -133,7 +133,11 @@ function HomePage() {
   }, []);
 
   const handleSaveNotes = () => {
-    saveNotes(notes);
+    const text = notes.trim();
+    if (!text) return;
+    saveNotes("");
+    addQuickNote(text);
+    setNotes("");
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
