@@ -177,7 +177,7 @@ function PerfilPage() {
                 value={form.nome}
                 onChange={(e) => setForm({ ...form, nome: e.target.value })}
                 placeholder="Seu nome"
-                className="input"
+                className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </Field>
             <Field label="Nome profissional (opcional)">
@@ -186,7 +186,7 @@ function PerfilPage() {
                 value={form.nome_profissional}
                 onChange={(e) => setForm({ ...form, nome_profissional: e.target.value })}
                 placeholder="Ex.: Psic. Maria Souza"
-                className="input"
+                className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </Field>
             <Field label="E-mail">
@@ -195,7 +195,7 @@ function PerfilPage() {
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="seu@email.com"
-                className="input"
+                className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </Field>
             <Field label="Telefone (opcional)">
@@ -204,7 +204,7 @@ function PerfilPage() {
                 value={form.telefone}
                 onChange={(e) => setForm({ ...form, telefone: e.target.value })}
                 placeholder="(11) 99999-9999"
-                className="input"
+                className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </Field>
           </div>
@@ -342,7 +342,7 @@ function PerfilPage() {
                   value={deleteConfirmation}
                   onChange={(event) => setDeleteConfirmation(event.target.value)}
                   placeholder="DELETAR"
-                  className="input"
+                  className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
               </label>
 
@@ -404,7 +404,7 @@ function PinField({
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
         placeholder="0000"
-        className="input"
+        className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
       />
     </label>
   );
