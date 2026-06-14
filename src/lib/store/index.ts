@@ -1,6 +1,8 @@
 import type {
   Appointment,
+  CashEntry,
   Clinic,
+  ClinicPaymentRecord,
   DayStatus,
   DayStatusRecord,
   MonthlyPayment,
@@ -16,6 +18,8 @@ export const STORAGE_KEYS = {
   dayStatuses: "psiu:day-statuses",
   vacations: "psiu:vacations",
   monthlyPayments: "psiu:monthly-payments",
+  cashEntries: "psiu:cash-entries",
+  clinicPayments: "psiu:clinic-payments",
   seeded: "psiu:store:seeded",
 } as const;
 
@@ -97,11 +101,45 @@ export function normalizePatientSchedules(patient: Patient): PatientSchedule[] {
 }
 
 // ---------- Clinics ----------
+export function getClinicPaymentTermDays(clinic?: Pick<Clinic, "paymentTermType" | "customPaymentDays" | "paymentTermDays">) {
+  if (clinic?.paymentTermType === "60_days") return 60;
+  if (clinic?.paymentTermType === "custom") {
+    const customDays = Number(clinic.customPaymentDays ?? clinic.paymentTermDays);
+    return Number.isFinite(customDays) && customDays > 0 ? customDays : 30;
+  }
+  if (clinic?.paymentTermType === "30_days") return 30;
+  const savedDays = Number(clinic?.paymentTermDays);
+  return Number.isFinite(savedDays) && savedDays > 0 ? savedDays : 30;
+}
+
+export function normalizeClinicPaymentTerm(clinic: Clinic): Clinic {
+  const days = getClinicPaymentTermDays(clinic);
+  const paymentTermType =
+    clinic.paymentTermType ?? (days === 60 ? "60_days" : days === 30 ? "30_days" : "custom");
+
+  return {
+    ...clinic,
+    paymentTermType,
+    customPaymentDays: paymentTermType === "custom" ? days : undefined,
+    paymentTermDays: days,
+  };
+}
+
+export function clinicPaymentDueDate(dateKey: string, clinic?: Clinic) {
+  const dueDate = parseDateKey(dateKey);
+  dueDate.setDate(dueDate.getDate() + getClinicPaymentTermDays(clinic));
+  return dueDate;
+}
+
+export function clinicPaymentDueMonth(dateKey: string, clinic?: Clinic) {
+  return monthKey(toDateKey(clinicPaymentDueDate(dateKey, clinic)));
+}
+
 export function getClinics(): Clinic[] {
-  return read<Clinic>(STORAGE_KEYS.clinics);
+  return read<Clinic>(STORAGE_KEYS.clinics).map(normalizeClinicPaymentTerm);
 }
 export function saveClinics(clinics: Clinic[]) {
-  write(STORAGE_KEYS.clinics, clinics);
+  write(STORAGE_KEYS.clinics, clinics.map(normalizeClinicPaymentTerm));
 }
 
 // ---------- Patients ----------
@@ -113,6 +151,45 @@ export function savePatients(patients: Patient[]) {
 }
 export function getActivePatients(): Patient[] {
   return getPatients().filter((p) => p.status === "ativo");
+}
+
+export function patientHasHistory(patientId: string): boolean {
+  if (!patientId) return false;
+
+  const patientAppointments = getAppointments().filter(
+    (appointment) => appointment.patientId === patientId,
+  );
+
+  const hasAppointmentHistory = patientAppointments.some((appointment) => {
+    if (["realizado", "falta", "falta-justificada"].includes(appointment.status)) {
+      return true;
+    }
+    if (appointment.paid || appointment.repasseConfirmed) return true;
+    if (appointment.status === "cancelado") return true;
+    if (appointment.id.startsWith("rescheduled:")) return true;
+    if (appointment.originalDate && appointmentDateKey(appointment) !== appointment.originalDate) {
+      return true;
+    }
+    return false;
+  });
+  if (hasAppointmentHistory) return true;
+
+  const hasMonthlyPaymentHistory = getMonthlyPayments().some(
+    (payment) => payment.patientId === patientId,
+  );
+  if (hasMonthlyPaymentHistory) return true;
+
+  const appointmentIds = new Set(patientAppointments.map((appointment) => appointment.id));
+  const hasCashEntryHistory = getCashEntries().some(
+    (entry) =>
+      entry.patientId === patientId ||
+      Boolean(entry.appointmentId && appointmentIds.has(entry.appointmentId)),
+  );
+  if (hasCashEntryHistory) return true;
+
+  return getClinicPaymentRecords().some((record) =>
+    record.appointmentIds.some((appointmentId) => appointmentIds.has(appointmentId)),
+  );
 }
 
 // ---------- Calendar state ----------
@@ -192,6 +269,13 @@ export function recordMonthlyPayment(
   month: string,
   amountDue: number,
   amountReceived: number,
+  meta: {
+    appointmentId?: string;
+    receivedMonth?: string;
+    delayed?: boolean;
+    source?: MonthlyPayment["source"];
+    notes?: string;
+  } = {},
 ) {
   const summary = getMonthlyPaymentSummary(patientId, month, amountDue);
   const nextReceived = Math.min(summary.amountReceived + amountReceived, amountDue);
@@ -210,14 +294,75 @@ export function recordMonthlyPayment(
       amountDue,
       amountReceived: Math.max(amountReceived, 0),
       status,
+      appointmentId: meta.appointmentId,
+      receivedMonth: meta.receivedMonth ?? month,
+      delayed: meta.delayed,
+      source: meta.source,
+      notes: meta.notes,
       paidAt: new Date().toISOString(),
     },
   ]);
+  if (amountReceived > 0) {
+    addCashEntry({
+      source: "particular-mensal",
+      patientId,
+      appointmentId: meta.appointmentId,
+      month,
+      receivedMonth: meta.receivedMonth ?? month,
+      delayed: meta.delayed,
+      amount: amountReceived,
+      notes: status === "pago" ? "Pagamento mensal integral" : "Pagamento mensal parcial",
+    });
+  }
 }
 
 export function markMonthlyPaid(patientId: string, month: string, amountDue = 0) {
   if (isMonthlyPaid(patientId, month)) return;
   recordMonthlyPayment(patientId, month, amountDue, amountDue);
+}
+
+export function getCashEntries(): CashEntry[] {
+  return read<CashEntry>(STORAGE_KEYS.cashEntries);
+}
+
+export function saveCashEntries(items: CashEntry[]) {
+  write(STORAGE_KEYS.cashEntries, items);
+}
+
+export function addCashEntry(entry: Omit<CashEntry, "id" | "createdAt">) {
+  saveCashEntries([
+    ...getCashEntries(),
+    {
+      ...entry,
+      id: uid(),
+      createdAt: new Date().toISOString(),
+    },
+  ]);
+}
+
+export function getClinicPaymentRecords(): ClinicPaymentRecord[] {
+  return read<ClinicPaymentRecord>(STORAGE_KEYS.clinicPayments);
+}
+
+export function saveClinicPaymentRecords(items: ClinicPaymentRecord[]) {
+  write(STORAGE_KEYS.clinicPayments, items);
+}
+
+export function upsertClinicPaymentRecord(record: Omit<ClinicPaymentRecord, "id" | "confirmedAt">) {
+  const current = getClinicPaymentRecords();
+  const existing = current.find(
+    (item) => item.clinicId === record.clinicId && item.month === record.month,
+  );
+  const nextRecord: ClinicPaymentRecord = {
+    ...record,
+    id: existing?.id ?? uid(),
+    confirmedAt: new Date().toISOString(),
+  };
+  saveClinicPaymentRecords(
+    existing
+      ? current.map((item) => (item.id === existing.id ? nextRecord : item))
+      : [...current, nextRecord],
+  );
 }
 
 // ---------- Appointments ----------

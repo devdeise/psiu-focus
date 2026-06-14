@@ -18,9 +18,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  addCashEntry,
   addMinutesToTime,
   combineDateTime,
   getAgendaAppointmentsForDate,
+  getCashEntries,
   getClinics,
   getDayStatus,
   getMonthlyPaymentSummary,
@@ -108,6 +110,13 @@ type MonthlyPaymentDraft = {
   amountReceived: string;
 };
 
+type SessionPresenceChoice = "received" | "not-received" | "";
+
+type SessionPresenceDraft = {
+  appointment: AgendaItem;
+  paymentReceived: SessionPresenceChoice;
+};
+
 const durationOptions = [30, 45, 50, 60, 90, 120] as const;
 const justifiedAbsenceReasons = [
   "Problema de saúde",
@@ -190,6 +199,7 @@ function AgendaPage() {
   const [statusAbsenceConfirmOpen, setStatusAbsenceConfirmOpen] = useState(false);
   const [justifiedAbsence, setJustifiedAbsence] = useState<JustifiedAbsenceDraft | null>(null);
   const [monthlyPayment, setMonthlyPayment] = useState<MonthlyPaymentDraft | null>(null);
+  const [sessionPresence, setSessionPresence] = useState<SessionPresenceDraft | null>(null);
 
   const reload = () => {
     setPatients(getPatients());
@@ -254,6 +264,29 @@ function AgendaPage() {
   };
 
   const completePresence = (item: AgendaItem, paid: boolean) => {
+    if (
+      item.patient.paymentType === "particular" &&
+      item.patient.paymentFrequency === "sessao" &&
+      paid
+    ) {
+      const hasCashEntry = getCashEntries().some(
+        (entry) =>
+          entry.source === "particular-sessao" &&
+          entry.appointmentId === item.id,
+      );
+
+      if (!hasCashEntry) {
+        addCashEntry({
+          source: "particular-sessao",
+          patientId: item.patient.id,
+          appointmentId: item.id,
+          receivedMonth: monthKey(dateKeyFromIso(item.startsAt)),
+          amount: Number(item.patient.sessionValue) || 0,
+          notes: "Pagamento por sessão recebido na agenda",
+        });
+      }
+    }
+
     updateAppointment(item, {
       status: "realizado",
       paid,
@@ -269,7 +302,7 @@ function AgendaPage() {
     }
 
     if (item.patient.paymentFrequency === "sessao") {
-      completePresence(item, window.confirm("Pagamento recebido para esta sessão?"));
+      setSessionPresence({ appointment: item, paymentReceived: "" });
       return;
     }
 
@@ -285,6 +318,17 @@ function AgendaPage() {
       choice: "integral",
       amountReceived: "",
     });
+  };
+
+  const confirmSessionPresence = () => {
+    if (!sessionPresence) return;
+    if (!sessionPresence.paymentReceived) {
+      setMessage("Selecione se o pagamento foi recebido.");
+      return;
+    }
+
+    completePresence(sessionPresence.appointment, sessionPresence.paymentReceived === "received");
+    setSessionPresence(null);
   };
 
   const confirmMonthlyPayment = () => {
@@ -1241,6 +1285,116 @@ function AgendaPage() {
                     Confirmar falta justificada
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sessionPresence && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-4 backdrop-blur-sm">
+            <div className="glass-card w-full max-w-lg p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">Confirmar presença</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Confirme a presença e informe se o pagamento da sessão foi recebido.
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setSessionPresence(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="mt-4 grid gap-2 rounded-lg border border-border bg-card/40 p-4 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Paciente</span>
+                  <span className="font-medium">{sessionPresence.appointment.patient.name}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Data</span>
+                  <span>
+                    {parseDateKey(dateKeyFromIso(sessionPresence.appointment.startsAt)).toLocaleDateString(
+                      "pt-BR",
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Horário</span>
+                  <span>
+                    {appointmentTime(sessionPresence.appointment)} -{" "}
+                    {appointmentEnd(sessionPresence.appointment)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Valor</span>
+                  <span>{money(sessionPresence.appointment.patient.sessionValue)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Origem</span>
+                  <span>Particular</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Tipo de atendimento</span>
+                  <span>
+                    {sessionPresence.appointment.patient.attendanceTypeName ?? "Terapia"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <span className="text-sm font-semibold">O pagamento foi recebido?</span>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant={
+                      sessionPresence.paymentReceived === "received" ? "default" : "outline"
+                    }
+                    className={
+                      sessionPresence.paymentReceived === "received"
+                        ? "border-primary shadow-[0_0_18px_rgba(34,211,238,0.22)]"
+                        : "bg-card/60"
+                    }
+                    onClick={() =>
+                      setSessionPresence({
+                        ...sessionPresence,
+                        paymentReceived: "received",
+                      })
+                    }
+                  >
+                    Sim, recebido
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      sessionPresence.paymentReceived === "not-received" ? "default" : "outline"
+                    }
+                    className={
+                      sessionPresence.paymentReceived === "not-received"
+                        ? "border-primary shadow-[0_0_18px_rgba(34,211,238,0.22)]"
+                        : "bg-card/60"
+                    }
+                    onClick={() =>
+                      setSessionPresence({
+                        ...sessionPresence,
+                        paymentReceived: "not-received",
+                      })
+                    }
+                  >
+                    Não recebido
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <Button variant="outline" onClick={() => setSessionPresence(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={!sessionPresence.paymentReceived}
+                  onClick={confirmSessionPresence}
+                >
+                  Confirmar presença
+                </Button>
               </div>
             </div>
           </div>

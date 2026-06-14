@@ -25,6 +25,7 @@ import {
   getAppointments,
   getClinics,
   getPatients,
+  patientHasHistory,
   saveAppointments,
   saveClinics,
   savePatients,
@@ -32,6 +33,7 @@ import {
 import type {
   Clinic,
   ClinicAttendanceType,
+  ClinicPaymentTermType,
   Patient,
   PatientSchedule,
   PaymentFrequency,
@@ -54,6 +56,8 @@ type ClinicDraft = {
   id?: string;
   name: string;
   types: ClinicTypeDraft[];
+  paymentTermType: ClinicPaymentTermType;
+  customPaymentDays: string;
 };
 
 type PatientScheduleDraft = {
@@ -74,6 +78,15 @@ type PatientDraft = {
   billingModel: PaymentFrequency;
   notes: string;
 };
+
+type DeletePatientDraft = {
+  patient: Patient;
+  mode: "simple" | "protected" | "blocked";
+  pin: string;
+  error: string;
+};
+
+const PIN_STORAGE_KEY = "psiu:internal-pin";
 
 const weekDays = [
   { value: "0", label: "Domingo" },
@@ -97,6 +110,15 @@ function uid() {
   return crypto.randomUUID();
 }
 
+function loadInternalPin() {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(PIN_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function money(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -118,10 +140,23 @@ function typeValueText(value: number) {
   return value ? String(value) : "";
 }
 
+function clinicPaymentTermDaysFromDraft(draft: ClinicDraft) {
+  if (draft.paymentTermType === "60_days") return 60;
+  if (draft.paymentTermType === "custom") return Number(draft.customPaymentDays);
+  return 30;
+}
+
+function clinicPaymentTermLabel(clinic: Clinic) {
+  const days = Number(clinic.paymentTermDays) || 30;
+  return `${days} dias`;
+}
+
 function emptyClinicDraft(): ClinicDraft {
   return {
     name: "",
     types: [{ id: uid(), name: "", value: "" }],
+    paymentTermType: "30_days",
+    customPaymentDays: "",
   };
 }
 
@@ -267,8 +302,10 @@ function CadastroPage() {
   const [clinicDraft, setClinicDraft] = useState<ClinicDraft>(() => emptyClinicDraft());
   const [patientDraft, setPatientDraft] = useState<PatientDraft>(() => emptyPatientDraft());
   const [message, setMessage] = useState("");
+  const [successToast, setSuccessToast] = useState("");
   const [activeTab, setActiveTab] = useState("clinicas");
   const [reactivateTarget, setReactivateTarget] = useState<Patient | null>(null);
+  const [deleteDraft, setDeleteDraft] = useState<DeletePatientDraft | null>(null);
 
   const activePatients = useMemo(
     () => patients.filter((patient) => patient.status === "ativo"),
@@ -284,16 +321,28 @@ function CadastroPage() {
     setPatients(getPatients());
   }, []);
 
-  const persistClinics = (next: Clinic[], note: string) => {
+  useEffect(() => {
+    if (!successToast) return;
+    const timeout = window.setTimeout(() => setSuccessToast(""), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [successToast]);
+
+  const showSuccessToast = (text: string) => {
+    setSuccessToast(text);
+  };
+
+  const persistClinics = (next: Clinic[], note: string, toast?: string) => {
     setClinics(next);
     saveClinics(next);
     setMessage(note);
+    if (toast) showSuccessToast(toast);
   };
 
-  const persistPatients = (next: Patient[], note: string) => {
+  const persistPatients = (next: Patient[], note: string, toast?: string) => {
     setPatients(next);
     savePatients(next);
     setMessage(note);
+    if (toast) showSuccessToast(toast);
   };
 
   const updateClinicType = (id: string, patch: Partial<ClinicTypeDraft>) => {
@@ -314,6 +363,9 @@ function CadastroPage() {
         name: type.name,
         value: typeValueText(type.value),
       })),
+      paymentTermType: clinic.paymentTermType ?? "30_days",
+      customPaymentDays:
+        clinic.paymentTermType === "custom" ? String(clinic.customPaymentDays ?? clinic.paymentTermDays ?? "") : "",
     });
     setMessage("");
   };
@@ -339,6 +391,14 @@ function CadastroPage() {
       setMessage("Cada tipo precisa ter nome e valor.");
       return;
     }
+    const paymentTermDays = clinicPaymentTermDaysFromDraft(clinicDraft);
+    if (
+      clinicDraft.paymentTermType === "custom" &&
+      (!Number.isFinite(paymentTermDays) || paymentTermDays <= 0)
+    ) {
+      setMessage("Informe uma quantidade de dias maior que zero.");
+      return;
+    }
 
     const existing = clinics.find((clinic) => clinic.id === clinicDraft.id);
     const clinic: Clinic = {
@@ -348,6 +408,9 @@ function CadastroPage() {
       repassePercent: existing?.repassePercent ?? 0,
       defaultSessionValue: cleaned[0].value,
       paymentTypes: existing?.paymentTypes?.length ? existing.paymentTypes : ["clinica"],
+      paymentTermType: clinicDraft.paymentTermType,
+      customPaymentDays: clinicDraft.paymentTermType === "custom" ? paymentTermDays : undefined,
+      paymentTermDays,
       notes: existing?.notes,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     };
@@ -356,7 +419,11 @@ function CadastroPage() {
       ? clinics.map((item) => (item.id === clinic.id ? clinic : item))
       : [...clinics, clinic];
 
-    persistClinics(next, existing ? "Clínica atualizada." : "Clínica cadastrada.");
+    persistClinics(
+      next,
+      existing ? "Clínica atualizada." : "Clínica cadastrada.",
+      existing ? "Alteração salva com sucesso." : "Cadastro salvo com sucesso.",
+    );
     resetClinicForm();
   };
 
@@ -571,6 +638,11 @@ function CadastroPage() {
         : existing
           ? "Paciente atualizado."
           : "Paciente cadastrado.",
+      reactivate
+        ? "Paciente reativado com sucesso."
+        : existing
+          ? "Alteração salva com sucesso."
+          : "Cadastro salvo com sucesso.",
     );
     resetPatientForm();
     if (reactivate) setActiveTab("pacientes");
@@ -585,12 +657,45 @@ function CadastroPage() {
     persistPatients(next, "Paciente encerrado. Histórico preservado.");
   };
 
-  const deletePatient = (patientId: string) => {
+  const performDeletePatient = (patientId: string) => {
     saveAppointments(getAppointments().filter((appointment) => appointment.patientId !== patientId));
     persistPatients(
       patients.filter((patient) => patient.id !== patientId),
       "Paciente excluído.",
     );
+  };
+
+  const requestDeletePatient = (patientId: string) => {
+    const patient = patients.find((item) => item.id === patientId);
+    if (!patient) return;
+
+    if (!patientHasHistory(patientId)) {
+      setDeleteDraft({ patient, mode: "simple", pin: "", error: "" });
+      return;
+    }
+
+    if (!loadInternalPin()) {
+      setDeleteDraft({ patient, mode: "blocked", pin: "", error: "" });
+      return;
+    }
+
+    setDeleteDraft({ patient, mode: "protected", pin: "", error: "" });
+  };
+
+  const confirmDeletePatient = () => {
+    if (!deleteDraft) return;
+    if (deleteDraft.mode === "blocked") return;
+
+    if (deleteDraft.mode === "protected" && deleteDraft.pin !== loadInternalPin()) {
+      setDeleteDraft({
+        ...deleteDraft,
+        error: "PIN incorreto. Tente novamente.",
+      });
+      return;
+    }
+
+    performDeletePatient(deleteDraft.patient.id);
+    setDeleteDraft(null);
   };
 
   const startReactivate = (patient: Patient) => {
@@ -612,6 +717,16 @@ function CadastroPage() {
   return (
     <AppLayout>
       <div className="flex flex-col gap-6">
+        {successToast && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed right-4 top-4 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-lg border border-primary/40 bg-background/95 px-4 py-3 text-sm font-medium text-foreground shadow-[0_0_24px_rgba(34,211,238,0.22)] backdrop-blur sm:right-6 sm:top-6"
+          >
+            {successToast}
+          </div>
+        )}
+
         <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Cadastro</h1>
@@ -661,6 +776,47 @@ function CadastroPage() {
                       placeholder="Ex.: Clínica Evoluir"
                     />
                   </Field>
+
+                  <Field label="Prazo de pagamento da clínica">
+                    <Select
+                      value={clinicDraft.paymentTermType}
+                      onValueChange={(value) =>
+                        setClinicDraft((draft) => ({
+                          ...draft,
+                          paymentTermType: value as ClinicPaymentTermType,
+                          customPaymentDays: value === "custom" ? draft.customPaymentDays : "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o prazo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30_days">30 dias</SelectItem>
+                        <SelectItem value="60_days">60 dias</SelectItem>
+                        <SelectItem value="custom">Prazo personalizado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  {clinicDraft.paymentTermType === "custom" && (
+                    <Field label="Quantidade de dias">
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputMode="numeric"
+                        value={clinicDraft.customPaymentDays}
+                        onChange={(event) =>
+                          setClinicDraft((draft) => ({
+                            ...draft,
+                            customPaymentDays: event.target.value.replace(/\D/g, ""),
+                          }))
+                        }
+                        placeholder="Ex.: 45"
+                      />
+                    </Field>
+                  )}
 
                   <div className="grid gap-3">
                     <div className="flex items-center justify-between gap-3">
@@ -739,6 +895,7 @@ function CadastroPage() {
                         </div>
                         <div className="mt-3 grid gap-2">
                           <MobileField label="Tipos" value={clinicTypeLabel(clinic)} />
+                          <MobileField label="Prazo" value={clinicPaymentTermLabel(clinic)} />
                           <MobileField label="Pacientes" value={String(count)} />
                         </div>
                       </article>
@@ -752,6 +909,7 @@ function CadastroPage() {
                       <tr className="border-b border-border">
                         <th className="px-4 py-3">Nome</th>
                         <th className="px-4 py-3">Tipos</th>
+                        <th className="w-32 px-4 py-3">Prazo</th>
                         <th className="w-28 px-4 py-3">Pacientes</th>
                         <th className="w-28 px-4 py-3 text-right">Ações</th>
                       </tr>
@@ -763,6 +921,7 @@ function CadastroPage() {
                           <tr key={clinic.id} className="border-b border-border/70 last:border-0">
                             <td className="px-4 py-3 font-medium">{clinic.name}</td>
                             <td className="px-4 py-3 text-muted-foreground">{clinicTypeLabel(clinic)}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{clinicPaymentTermLabel(clinic)}</td>
                             <td className="px-4 py-3">{count}</td>
                             <td className="px-4 py-3">
                               <div className="flex justify-end gap-1">
@@ -1014,7 +1173,7 @@ function CadastroPage() {
                 emptyLabel="Nenhum paciente ativo."
                 onEdit={editPatient}
                 onClose={closePatient}
-                onDelete={deletePatient}
+                onDelete={requestDeletePatient}
               />
             </section>
           </TabsContent>
@@ -1251,11 +1410,101 @@ function CadastroPage() {
                 closed
                 onEdit={editPatient}
                 onReactivate={startReactivate}
-                onDelete={deletePatient}
+                onDelete={requestDeletePatient}
               />
             </section>
           </TabsContent>
         </Tabs>
+
+        {deleteDraft && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-background/75 p-4 backdrop-blur-sm">
+            <div className="glass-card w-full max-w-lg p-5">
+              {deleteDraft.mode === "simple" && (
+                <>
+                  <h2 className="text-xl font-black">Excluir paciente</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Deseja excluir este paciente? Essa ação removerá o cadastro local.
+                  </p>
+                  <div className="mt-4 rounded-lg border border-border bg-card/40 p-3 text-sm">
+                    <span className="text-muted-foreground">Paciente: </span>
+                    <span className="font-semibold">{deleteDraft.patient.name}</span>
+                  </div>
+                  <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button variant="outline" onClick={() => setDeleteDraft(null)}>
+                      Cancelar
+                    </Button>
+                    <Button variant="destructive" onClick={confirmDeletePatient}>
+                      Excluir
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {deleteDraft.mode === "blocked" && (
+                <>
+                  <h2 className="text-xl font-black">Exclusão protegida por PIN</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Cadastre um PIN de segurança no Perfil antes de excluir pacientes com histórico.
+                  </p>
+                  <div className="mt-4 rounded-lg border border-border bg-card/40 p-3 text-sm">
+                    <span className="text-muted-foreground">Paciente: </span>
+                    <span className="font-semibold">{deleteDraft.patient.name}</span>
+                  </div>
+                  <div className="mt-5 flex justify-end">
+                    <Button variant="outline" onClick={() => setDeleteDraft(null)}>
+                      Entendi
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {deleteDraft.mode === "protected" && (
+                <>
+                  <h2 className="text-xl font-black">Exclusão protegida por PIN</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Este paciente possui histórico de atendimento. Para evitar exclusões acidentais,
+                    informe o PIN de segurança interno.
+                  </p>
+                  <div className="mt-4 grid gap-4">
+                    <div className="rounded-lg border border-border bg-card/40 p-3 text-sm">
+                      <span className="text-muted-foreground">Paciente: </span>
+                      <span className="font-semibold">{deleteDraft.patient.name}</span>
+                    </div>
+                    <Field label="PIN de segurança">
+                      <Input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={deleteDraft.pin}
+                        onChange={(event) =>
+                          setDeleteDraft({
+                            ...deleteDraft,
+                            pin: event.target.value.replace(/\D/g, "").slice(0, 4),
+                            error: "",
+                          })
+                        }
+                        placeholder="0000"
+                      />
+                    </Field>
+                    {deleteDraft.error && (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        {deleteDraft.error}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button variant="outline" onClick={() => setDeleteDraft(null)}>
+                      Cancelar
+                    </Button>
+                    <Button variant="destructive" onClick={confirmDeletePatient}>
+                      Confirmar exclusão
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

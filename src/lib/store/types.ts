@@ -17,6 +17,8 @@ export type ClinicAttendanceType = {
   value: number;
 };
 
+export type ClinicPaymentTermType = "30_days" | "60_days" | "custom";
+
 export type Clinic = {
   id: string;
   name: string;
@@ -28,6 +30,9 @@ export type Clinic = {
   defaultSessionValue?: number;
   /** Tipos de cobrança aceitos pela clínica. */
   paymentTypes: PaymentType[];
+  paymentTermType?: ClinicPaymentTermType;
+  customPaymentDays?: number;
+  paymentTermDays?: number;
   /** Endereço/observações livres. */
   notes?: string;
   createdAt: string;
@@ -108,5 +113,41 @@ export type MonthlyPayment = {
   amountDue?: number;
   amountReceived?: number;
   status?: "pendente" | "parcial" | "pago";
+  appointmentId?: string;
+  receivedMonth?: string;
+  delayed?: boolean;
+  source?: "agenda" | "confirmar-pagamento";
+  notes?: string;
   paidAt: string;
+};
+
+export type CashEntry = {
+  id: string;
+  source: "particular-sessao" | "particular-mensal" | "clinica";
+  patientId?: string;
+  clinicId?: string;
+  appointmentId?: string;
+  month?: string;
+  receivedMonth: string;
+  delayed?: boolean;
+  expectedAmount?: number;
+  discountAmount?: number;
+  amount: number;
+  createdAt: string;
+  notes?: string;
+};
+
+export type ClinicPaymentRecord = {
+  id: string;
+  clinicId: string;
+  month: string;
+  amount: number;
+  expectedAmount?: number;
+  discountAmount?: number;
+  appointmentIds: string[];
+  status: "aguardando" | "atrasado" | "confirmado";
+  receivedMonth: string;
+  delayed?: boolean;
+  confirmedAt: string;
+  notes?: string;
 };

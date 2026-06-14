@@ -12,6 +12,17 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
+import {
+  getAppointments,
+  clinicPaymentDueDate,
+  clinicPaymentDueMonth,
+  getClinicPaymentRecords,
+  getClinics,
+  getMonthlyPaymentSummary,
+  getPatients,
+  monthKey,
+  toDateKey,
+} from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -24,6 +35,54 @@ const navItems = [
   { to: "/cadastro", label: "Cadastro", icon: UserPlus },
   { to: "/perfil", label: "Perfil", icon: UserCircle },
 ] as const;
+
+function appointmentDate(iso: string) {
+  return toDateKey(new Date(iso));
+}
+
+function hasRealPaymentPending() {
+  const appointments = getAppointments().filter((appointment) => appointment.status === "realizado");
+  const patients = getPatients();
+  const clinics = getClinics();
+  const clinicRecords = getClinicPaymentRecords();
+  const now = new Date();
+  const monthlyGroups = new Map<string, { patientId: string; month: string; amount: number }>();
+
+  for (const appointment of appointments) {
+    const patient = patients.find((item) => item.id === appointment.patientId);
+    if (!patient) continue;
+    const month = monthKey(appointmentDate(appointment.startsAt));
+
+    if (patient.paymentType === "clinica") {
+      const clinicId = patient.clinicId ?? appointment.clinicId ?? "";
+      const clinic = clinics.find((item) => item.id === clinicId);
+      const dueMonth = clinicPaymentDueMonth(appointmentDate(appointment.startsAt), clinic);
+      const record = clinicRecords.find(
+        (item) => item.clinicId === clinicId && item.month === dueMonth,
+      );
+      const confirmed = appointment.repasseConfirmed || record?.status === "confirmado";
+      if (!confirmed && now > clinicPaymentDueDate(appointmentDate(appointment.startsAt), clinic)) return true;
+      continue;
+    }
+
+    if (patient.paymentType !== "particular") continue;
+    if (patient.paymentFrequency === "sessao" && !appointment.paid) return true;
+    if (patient.paymentFrequency === "mensal") {
+      monthlyGroups.set(`${patient.id}:${month}`, {
+        patientId: patient.id,
+        month,
+        amount: patient.sessionValue,
+      });
+    }
+  }
+
+  for (const group of monthlyGroups.values()) {
+    const summary = getMonthlyPaymentSummary(group.patientId, group.month, group.amount);
+    if (summary.status === "pendente" || summary.status === "parcial") return true;
+  }
+
+  return false;
+}
 
 function Brand() {
   return (
@@ -43,6 +102,7 @@ function Brand() {
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const paymentAlert = hasRealPaymentPending();
   return (
     <nav className="flex flex-col gap-1">
       {navItems.map((item) => {
@@ -59,10 +119,17 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               active
                 ? "gradient-primary text-primary-foreground shadow-glow"
                 : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              item.to === "/confirmar-pagamento" &&
+                paymentAlert &&
+                !active &&
+                "border border-destructive/40 bg-destructive/10 text-foreground",
             )}
           >
             <Icon className="h-4.5 w-4.5 shrink-0" />
             <span className="truncate">{item.label}</span>
+            {item.to === "/confirmar-pagamento" && paymentAlert && (
+              <span className="ml-auto h-2.5 w-2.5 rounded-full bg-destructive shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
+            )}
           </Link>
         );
       })}

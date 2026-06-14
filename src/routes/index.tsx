@@ -13,13 +13,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { addQuickNote } from "@/lib/notes-store";
 import {
+  addMinutesToTime,
   countAbsences,
   getActivePatients,
+  getAgendaAppointmentsForDate,
   getAppointmentsToday,
-  getNextAppointment,
+  getClinics,
   getPatients,
+  timeFromIso,
+  toDateKey,
 } from "@/lib/store";
-import type { Appointment } from "@/lib/store/types";
+import type { Appointment, Clinic, Patient } from "@/lib/store/types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -100,6 +104,16 @@ function QuickAction({
 
 const NOTES_KEY = "psiu:quick-notes";
 
+type AppointmentSummary = {
+  appointment: Appointment;
+  patientName: string;
+  origin: string;
+  type: string;
+  start: string;
+  end: string;
+  date: string;
+};
+
 function loadNotes(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -117,6 +131,115 @@ function saveNotes(value: string) {
   } catch {}
 }
 
+function toMinutes(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function appointmentSummary(
+  appointment: Appointment,
+  patients: Patient[],
+  clinics: Clinic[],
+): AppointmentSummary {
+  const patient = patients.find((item) => item.id === appointment.patientId);
+  const clinic = patient?.clinicId
+    ? clinics.find((item) => item.id === patient.clinicId)
+    : undefined;
+  const start = timeFromIso(appointment.startsAt);
+
+  return {
+    appointment,
+    patientName: patient?.name ?? "Paciente",
+    origin: patient?.paymentType === "clinica" ? clinic?.name ?? "Clínica" : "Particular",
+    type:
+      patient?.attendanceTypeName ??
+      (patient?.paymentType === "clinica" ? "Clínica" : "Terapia"),
+    start,
+    end: addMinutesToTime(start, appointment.durationMin),
+    date: new Date(appointment.startsAt).toLocaleDateString("pt-BR"),
+  };
+}
+
+function getCurrentAppointment(now: Date) {
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  return (
+    getAgendaAppointmentsForDate(toDateKey(now)).find((appointment) => {
+      if (appointment.status !== "agendado") return false;
+      const start = toMinutes(timeFromIso(appointment.startsAt));
+      const end = start + appointment.durationMin;
+      return currentMinutes >= start && currentMinutes < end;
+    }) ?? null
+  );
+}
+
+function getUpcomingAppointment(now: Date) {
+  const today = toDateKey(now);
+
+  for (let offset = 0; offset < 120; offset += 1) {
+    const date = new Date(`${today}T00:00:00`);
+    date.setDate(date.getDate() + offset);
+    const items = getAgendaAppointmentsForDate(toDateKey(date))
+      .filter(
+        (appointment) =>
+          appointment.status === "agendado" &&
+          new Date(appointment.startsAt).getTime() > now.getTime(),
+      )
+      .sort(
+        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+      );
+    if (items[0]) return items[0];
+  }
+
+  return null;
+}
+
+function AppointmentBlock({
+  title,
+  appointment,
+  empty,
+}: {
+  title: string;
+  appointment: AppointmentSummary | null;
+  empty: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card/50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {title}
+          </div>
+          {appointment ? (
+            <div className="mt-3 grid gap-4 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(220px,auto)] sm:gap-8">
+              <div className="grid gap-2">
+                <div className="truncate text-xl font-bold text-foreground sm:text-2xl">
+                  {appointment.patientName}
+                </div>
+                <div className="text-muted-foreground">{appointment.date}</div>
+                <div className="font-semibold text-foreground">
+                  Horário: {appointment.start} - {appointment.end}
+                </div>
+              </div>
+              <div className="grid gap-2 rounded-lg border border-border bg-background/30 px-3 py-2.5 text-muted-foreground">
+                <div>Duração: {appointment.appointment.durationMin} min</div>
+                <div>Origem: {appointment.origin}</div>
+                <div>Tipo de atendimento: {appointment.type}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-base font-semibold text-muted-foreground">
+              {empty}
+            </div>
+          )}
+        </div>
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-card/60 text-foreground">
+          <Clock className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomePage() {
   const [greeting, setGreeting] = useState("Bom dia");
   const [notes, setNotes] = useState("");
@@ -124,8 +247,8 @@ function HomePage() {
   const [activePatients, setActivePatients] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
   const [absences, setAbsences] = useState(0);
-  const [next, setNext] = useState<Appointment | null>(null);
-  const [nextPatientName, setNextPatientName] = useState<string>("");
+  const [current, setCurrent] = useState<AppointmentSummary | null>(null);
+  const [next, setNext] = useState<AppointmentSummary | null>(null);
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -136,12 +259,15 @@ function HomePage() {
     setTodayCount(getAppointmentsToday().length);
     setAbsences(countAbsences());
 
-    const upcoming = getNextAppointment();
-    setNext(upcoming);
-    if (upcoming) {
-      const patient = getPatients().find((p) => p.id === upcoming.patientId);
-      setNextPatientName(patient?.name ?? "Paciente");
-    }
+    const now = new Date();
+    const patients = getPatients();
+    const clinics = getClinics();
+    const currentAppointment = getCurrentAppointment(now);
+    const upcoming = getUpcomingAppointment(now);
+    setCurrent(
+      currentAppointment ? appointmentSummary(currentAppointment, patients, clinics) : null,
+    );
+    setNext(upcoming ? appointmentSummary(upcoming, patients, clinics) : null);
   }, []);
 
   const handleSaveNotes = () => {
@@ -181,25 +307,17 @@ function HomePage() {
             className="pointer-events-none absolute inset-0 opacity-60"
             style={{ backgroundImage: "var(--gradient-glow)" }}
           />
-          <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 sm:flex sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Próximo atendimento
-              </div>
-              <div className="mt-2 text-xl font-bold sm:text-2xl">
-                {next
-                  ? `${nextPatientName} — ${new Date(next.startsAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
-                  : "Nenhum atendimento agendado"}
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {next
-                  ? `${next.durationMin} min${next.clinicId ? " · em clínica" : " · particular"}`
-                  : "Cadastre pacientes para começar a montar sua agenda."}
-              </div>
-            </div>
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-card/60 text-foreground">
-              <Clock className="h-6 w-6" />
-            </div>
+          <div className="relative grid gap-4 lg:grid-cols-2">
+            <AppointmentBlock
+              title="Atendimento Atual"
+              appointment={current}
+              empty="Nenhum atendimento em andamento."
+            />
+            <AppointmentBlock
+              title="Próximo Atendimento"
+              appointment={next}
+              empty="Nenhum próximo atendimento agendado."
+            />
           </div>
         </section>
 
