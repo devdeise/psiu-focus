@@ -1,27 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppLayout } from "@/components/app-layout";
 import { useEffect, useState } from "react";
-import { Bell, LockKeyhole, Trash2, UserCircle, X } from "lucide-react";
+import { Bell, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/perfil")({
   head: () => ({ meta: [{ title: "Perfil — PSIU!" }] }),
   component: PerfilPage,
 });
 
-const STORAGE_KEY = "psiu:profile";
 const PIN_STORAGE_KEY = "psiu:internal-pin";
 
-type Profile = { name: string; email: string };
-type PinMessage = { type: "success" | "error"; text: string } | null;
+type ProfileForm = {
+  nome: string;
+  email: string;
+  telefone: string;
+  nome_profissional: string;
+};
 
-function loadProfile(): Profile {
-  if (typeof window === "undefined") return { name: "", email: "" };
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Profile;
-  } catch {}
-  return { name: "", email: "" };
-}
+type PinMessage = { type: "success" | "error"; text: string } | null;
 
 function loadPin(): string {
   if (typeof window === "undefined") return "";
@@ -37,38 +35,76 @@ function isValidPin(pin: string) {
 }
 
 function PerfilPage() {
-  const [profile, setProfile] = useState<Profile>({ name: "", email: "" });
-  const [saved, setSaved] = useState(false);
+  const navigate = useNavigate();
+  const { user, profile, refreshProfile, signOut } = useAuth();
+  const [form, setForm] = useState<ProfileForm>({
+    nome: "",
+    email: "",
+    telefone: "",
+    nome_profissional: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const [hasPin, setHasPin] = useState(false);
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [pinMessage, setPinMessage] = useState<PinMessage>(null);
+
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteMessage, setDeleteMessage] = useState("");
 
   useEffect(() => {
-    setProfile(loadProfile());
     setHasPin(Boolean(loadPin()));
   }, []);
 
-  const save = (e: React.FormEvent) => {
+  useEffect(() => {
+    setForm({
+      nome: profile?.nome ?? "",
+      email: profile?.email ?? user?.email ?? "",
+      telefone: profile?.telefone ?? "",
+      nome_profissional: profile?.nome_profissional ?? "",
+    });
+  }, [profile, user]);
+
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!user) return;
+    setSaving(true);
+    setSavedMsg(null);
+    setSaveError(null);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        nome: form.nome.trim() || null,
+        email: form.email.trim() || null,
+        telefone: form.telefone.trim() || null,
+        nome_profissional: form.nome_profissional.trim() || null,
+      })
+      .eq("user_id", user.id);
+    setSaving(false);
+    if (error) {
+      setSaveError(error.message);
+      return;
+    }
+    setSavedMsg("Salvo!");
+    await refreshProfile();
+    setTimeout(() => setSavedMsg(null), 2000);
   };
 
-  const deleteLocalAccount = () => {
-    if (deleteConfirmation !== "DELETAR") return;
+  const handleLogout = async () => {
+    await signOut();
+    navigate({ to: "/auth", replace: true });
+  };
 
+  const deleteLocalData = () => {
+    if (deleteConfirmation !== "DELETAR") return;
     Object.keys(window.localStorage)
       .filter((key) => key.startsWith("psiu:"))
       .forEach((key) => window.localStorage.removeItem(key));
-
-    setProfile({ name: "", email: "" });
-    setSaved(false);
     setHasPin(false);
     setCurrentPin("");
     setNewPin("");
@@ -76,13 +112,12 @@ function PerfilPage() {
     setPinMessage(null);
     setDeleteConfirmation("");
     setDeleteModalOpen(false);
-    setDeleteMessage("Conta local deletada com sucesso.");
+    setDeleteMessage("Dados locais apagados deste dispositivo.");
   };
 
   const savePin = (e: React.FormEvent) => {
     e.preventDefault();
     setPinMessage(null);
-
     const storedPin = loadPin();
     if (storedPin && currentPin !== storedPin) {
       setPinMessage({ type: "error", text: "PIN atual incorreto." });
@@ -96,7 +131,6 @@ function PerfilPage() {
       setPinMessage({ type: "error", text: "A confirmação deve ser igual ao novo PIN." });
       return;
     }
-
     window.localStorage.setItem(PIN_STORAGE_KEY, newPin);
     setHasPin(true);
     setCurrentPin("");
@@ -111,58 +145,79 @@ function PerfilPage() {
   return (
     <AppLayout>
       <div className="flex flex-col gap-8">
-        <header className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
+        <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
           <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl gradient-primary text-primary-foreground glow">
             <UserCircle className="h-7 w-7" />
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-3xl font-black tracking-tight sm:text-4xl">Perfil</h1>
             <p className="text-sm text-muted-foreground">
-              Suas informações locais e preferências.
+              Suas informações e preferências.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-sm font-semibold transition hover:bg-card"
+          >
+            <LogOut className="h-4 w-4" /> Sair
+          </button>
         </header>
 
-        {/* Dados básicos */}
+        {/* Dados do perfil */}
         <form onSubmit={save} className="glass-card p-6">
           <h2 className="text-lg font-bold">Dados básicos</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Apenas para uso local. Nenhum login é necessário.
+            Salvos com segurança na sua conta.
           </p>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Nome
-              </label>
+            <Field label="Nome">
               <input
                 type="text"
-                value={profile.name}
-                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
                 placeholder="Seu nome"
-                className="mt-2 w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                className="input"
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                E-mail (opcional)
-              </label>
+            </Field>
+            <Field label="Nome profissional (opcional)">
+              <input
+                type="text"
+                value={form.nome_profissional}
+                onChange={(e) => setForm({ ...form, nome_profissional: e.target.value })}
+                placeholder="Ex.: Psic. Maria Souza"
+                className="input"
+              />
+            </Field>
+            <Field label="E-mail">
               <input
                 type="email"
-                value={profile.email}
-                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="seu@email.com"
-                className="mt-2 w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                className="input"
               />
-            </div>
+            </Field>
+            <Field label="Telefone (opcional)">
+              <input
+                type="tel"
+                value={form.telefone}
+                onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                placeholder="(11) 99999-9999"
+                className="input"
+              />
+            </Field>
           </div>
           <div className="mt-5 flex items-center gap-3">
             <button
               type="submit"
-              className="rounded-lg gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground glow transition hover:opacity-90"
+              disabled={saving}
+              className="rounded-lg gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground glow transition hover:opacity-90 disabled:opacity-60"
             >
-              Salvar
+              {saving ? "Salvando…" : "Salvar"}
             </button>
-            {saved && <span className="text-sm text-success">Salvo!</span>}
+            {savedMsg && <span className="text-sm text-success">{savedMsg}</span>}
+            {saveError && <span className="text-sm text-destructive">{saveError}</span>}
           </div>
         </form>
 
@@ -180,17 +235,9 @@ function PerfilPage() {
 
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
                 {hasPin && (
-                  <PinField
-                    label="PIN atual"
-                    value={currentPin}
-                    onChange={setCurrentPin}
-                  />
+                  <PinField label="PIN atual" value={currentPin} onChange={setCurrentPin} />
                 )}
-                <PinField
-                  label={hasPin ? "Novo PIN" : "Novo PIN"}
-                  value={newPin}
-                  onChange={setNewPin}
-                />
+                <PinField label="Novo PIN" value={newPin} onChange={setNewPin} />
                 <PinField
                   label={hasPin ? "Confirmar novo PIN" : "Confirmar PIN"}
                   value={confirmPin}
@@ -245,12 +292,12 @@ function PerfilPage() {
           </div>
         )}
 
-        {/* Zona de risco */}
+        {/* Zona de risco — apenas dados locais por enquanto */}
         <div className="glass-card p-6">
-          <h2 className="text-lg font-bold">Zona de risco</h2>
+          <h2 className="text-lg font-bold">Limpar dados locais</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Esta ação apaga todos os dados locais deste dispositivo, incluindo pacientes,
-            clínicas, agenda, pagamentos, anotações e preferências.
+            Apaga os dados locais deste navegador (pacientes, clínicas, agenda, pagamentos,
+            anotações, preferências). Sua conta não é removida.
           </p>
           <button
             onClick={() => {
@@ -261,7 +308,7 @@ function PerfilPage() {
             className="mt-4 inline-flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20"
           >
             <Trash2 className="h-4 w-4" />
-            Deletar conta
+            Limpar dados locais
           </button>
         </div>
 
@@ -270,10 +317,10 @@ function PerfilPage() {
             <div className="glass-card w-full max-w-lg p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-bold">Deletar conta local?</h2>
+                  <h2 className="text-lg font-bold">Apagar dados locais?</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Esta ação apagará todos os dados locais do PSIU neste dispositivo. Não
-                    será possível recuperar essas informações.
+                    Esta ação apagará todos os dados locais do PSIU neste dispositivo. Sua
+                    conta continua ativa.
                   </p>
                 </div>
                 <button
@@ -286,11 +333,6 @@ function PerfilPage() {
                 </button>
               </div>
 
-              <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                Como esta versão não possui backend, apenas os dados salvos neste navegador
-                serão apagados.
-              </div>
-
               <label className="mt-5 grid gap-2">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Digite DELETAR para confirmar
@@ -300,7 +342,7 @@ function PerfilPage() {
                   value={deleteConfirmation}
                   onChange={(event) => setDeleteConfirmation(event.target.value)}
                   placeholder="DELETAR"
-                  className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                  className="input"
                 />
               </label>
 
@@ -315,10 +357,10 @@ function PerfilPage() {
                 <button
                   type="button"
                   disabled={deleteConfirmation !== "DELETAR"}
-                  onClick={deleteLocalAccount}
+                  onClick={deleteLocalData}
                   className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Deletar conta
+                  Apagar dados
                 </button>
               </div>
             </div>
@@ -326,6 +368,17 @@ function PerfilPage() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
 
@@ -351,7 +404,7 @@ function PinField({
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
         placeholder="0000"
-        className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+        className="input"
       />
     </label>
   );
