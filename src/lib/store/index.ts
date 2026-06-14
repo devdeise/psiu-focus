@@ -53,6 +53,10 @@ export function parseDateKey(dateKey: string): Date {
   return new Date(`${dateKey}T00:00:00`);
 }
 
+export function dateKeyFromIso(iso: string): string {
+  return toDateKey(new Date(iso));
+}
+
 export function monthKey(dateKey: string): string {
   return dateKey.slice(0, 7);
 }

@@ -1161,7 +1161,7 @@ function CadastroPage() {
                     />
                   </Field>
 
-                  <Button onClick={submitPatient} className="w-full">
+                  <Button onClick={() => submitPatient()} className="w-full">
                     <Save className="h-4 w-4" /> Salvar paciente
                   </Button>
                 </div>

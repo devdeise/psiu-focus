@@ -130,7 +130,7 @@ function monthOverlapsPeriod(month: string, period: Period) {
   return monthEnd(month) >= period.start && monthStart(month) <= period.end;
 }
 
-function loadVisibleCards() {
+function loadVisibleCards(): CardId[] {
   const defaults = defaultCardOrder();
   if (typeof window === "undefined") return defaults;
   try {
@@ -141,7 +141,7 @@ function loadVisibleCards() {
     const forecastSeenKey = `${preferenceKey}:previsao-seen`;
     if (!window.localStorage.getItem(forecastSeenKey)) {
       window.localStorage.setItem(forecastSeenKey, "true");
-      return visible.includes("previsao") ? visible : [...visible, "previsao"];
+      return visible.includes("previsao") ? visible : ([...visible, "previsao"] as CardId[]);
     }
     return visible;
   } catch {
