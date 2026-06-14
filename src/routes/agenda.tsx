@@ -22,6 +22,7 @@ import {
   addMinutesToTime,
   combineDateTime,
   getAgendaAppointmentsForDate,
+  dateKeyFromIso,
   getCashEntries,
   getClinics,
   getDayStatus,
@@ -234,21 +235,19 @@ function AgendaPage() {
 
   const items = useMemo<AgendaItem[]>(() => {
     const q = query.trim().toLowerCase();
-    return appointments
-      .map((appointment) => {
-        const patient = patients.find((item) => item.id === appointment.patientId);
-        if (!patient || patient.status !== "ativo") return null;
-        const clinic =
-          patient.paymentType === "clinica"
-            ? clinics.find((item) => item.id === patient.clinicId)
-            : undefined;
-        return { ...appointment, patient, clinic };
-      })
-      .filter((item): item is AgendaItem => Boolean(item))
-      .filter((item) => {
-        if (!q) return true;
-        return item.patient.name.toLowerCase().includes(q);
-      });
+    const result: AgendaItem[] = [];
+    for (const appointment of appointments) {
+      const patient = patients.find((item) => item.id === appointment.patientId);
+      if (!patient || patient.status !== "ativo") continue;
+      const clinic =
+        patient.paymentType === "clinica"
+          ? clinics.find((item) => item.id === patient.clinicId)
+          : undefined;
+      const item: AgendaItem = { ...appointment, patient, clinic };
+      if (q && !item.patient.name.toLowerCase().includes(q)) continue;
+      result.push(item);
+    }
+    return result;
   }, [appointments, clinics, patients, query]);
 
   const pending = items.filter((item) => !isDone(item));
