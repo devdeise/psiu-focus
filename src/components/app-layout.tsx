@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Home,
   Calendar,
@@ -8,10 +8,11 @@ import {
   UserPlus,
   UserCircle,
   NotebookPen,
+  LogOut,
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getAppointments,
   clinicPaymentDueDate,
@@ -24,6 +25,7 @@ import {
   toDateKey,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { to: "/", label: "Home", icon: Home },
@@ -139,6 +141,54 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { session, loading, profile, user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !session) {
+      navigate({ to: "/auth", replace: true });
+    }
+  }, [loading, session, navigate]);
+
+  if (loading || !session) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
+        Carregando…
+      </div>
+    );
+  }
+
+  const displayName = profile?.nome || user?.email?.split("@")[0] || "Usuário";
+  const displayEmail = profile?.email || user?.email || "";
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate({ to: "/auth", replace: true });
+  };
+
+  const UserCard = () => (
+    <div className="rounded-lg border border-border bg-card/40 p-3">
+      <div className="flex items-center gap-2">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg gradient-primary text-primary-foreground">
+          <UserCircle className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">{displayName}</div>
+          {displayEmail && (
+            <div className="truncate text-xs text-muted-foreground">{displayEmail}</div>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card/60 px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-card"
+      >
+        <LogOut className="h-3.5 w-3.5" />
+        Sair
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen w-full">
@@ -150,8 +200,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="mt-6 flex-1 overflow-y-auto">
           <NavList />
         </div>
-        <div className="mt-4 rounded-lg border border-border bg-card/40 p-3 text-xs text-muted-foreground">
-          Versão local de protótipo. Dados salvos no seu navegador.
+        <div className="mt-4">
+          <UserCard />
         </div>
       </aside>
 
@@ -187,6 +237,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="mt-6 flex-1 overflow-y-auto">
               <NavList onNavigate={() => setMobileOpen(false)} />
+            </div>
+            <div className="mt-4">
+              <UserCard />
             </div>
           </div>
         </div>
