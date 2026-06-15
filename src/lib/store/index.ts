@@ -213,6 +213,7 @@ export function saveDayStatus(dateKey: string, status: DayStatus) {
     STORAGE_KEYS.dayStatuses,
     status === "normal" ? filtered : [...filtered, { date: dateKey, status }],
   );
+  void import("./cloud").then((m) => m.scheduleSync("dayStatuses"));
 }
 
 export function getVacations(): VacationPeriod[] {
@@ -221,6 +222,7 @@ export function getVacations(): VacationPeriod[] {
 
 export function saveVacations(periods: VacationPeriod[]) {
   write(STORAGE_KEYS.vacations, periods);
+  void import("./cloud").then((m) => m.scheduleSync("vacations"));
 }
 
 export function isVacationDate(dateKey: string): boolean {
