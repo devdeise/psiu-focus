@@ -153,6 +153,7 @@ export function getPatients(): Patient[] {
 }
 export function savePatients(patients: Patient[]) {
   write(STORAGE_KEYS.patients, patients);
+  void import("./cloud").then((m) => m.scheduleSync("patients"));
 }
 export function getActivePatients(): Patient[] {
   return getPatients().filter((p) => p.status === "ativo");
