@@ -144,6 +144,7 @@ export function getClinics(): Clinic[] {
 }
 export function saveClinics(clinics: Clinic[]) {
   write(STORAGE_KEYS.clinics, clinics.map(normalizeClinicPaymentTerm));
+  void import("./cloud").then((m) => m.scheduleSync("clinics"));
 }
 
 // ---------- Patients ----------
@@ -152,6 +153,7 @@ export function getPatients(): Patient[] {
 }
 export function savePatients(patients: Patient[]) {
   write(STORAGE_KEYS.patients, patients);
+  void import("./cloud").then((m) => m.scheduleSync("patients"));
 }
 export function getActivePatients(): Patient[] {
   return getPatients().filter((p) => p.status === "ativo");
@@ -211,6 +213,7 @@ export function saveDayStatus(dateKey: string, status: DayStatus) {
     STORAGE_KEYS.dayStatuses,
     status === "normal" ? filtered : [...filtered, { date: dateKey, status }],
   );
+  void import("./cloud").then((m) => m.scheduleSync("dayStatuses"));
 }
 
 export function getVacations(): VacationPeriod[] {
@@ -219,6 +222,7 @@ export function getVacations(): VacationPeriod[] {
 
 export function saveVacations(periods: VacationPeriod[]) {
   write(STORAGE_KEYS.vacations, periods);
+  void import("./cloud").then((m) => m.scheduleSync("vacations"));
 }
 
 export function isVacationDate(dateKey: string): boolean {
@@ -376,6 +380,7 @@ export function getAppointments(): Appointment[] {
 
 export function saveAppointments(items: Appointment[]) {
   write(STORAGE_KEYS.appointments, items);
+  void import("./cloud").then((m) => m.scheduleSync("appointments"));
 }
 
 export function upsertAppointment(item: Appointment) {

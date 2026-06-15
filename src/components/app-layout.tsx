@@ -143,6 +143,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { session, loading, profile, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
     if (!loading && !session) {
@@ -150,7 +151,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [loading, session, navigate]);
 
-  if (loading || !session) {
+  useEffect(() => {
+    let cancelled = false;
+    if (loading || !session?.user) {
+      setCloudReady(false);
+      return;
+    }
+    (async () => {
+      const cloud = await import("@/lib/store/cloud");
+      cloud.setCloudUser(session.user.id);
+      await cloud.pullAllFromCloud();
+      if (!cancelled) setCloudReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, session?.user?.id]);
+
+  if (loading || !session || !cloudReady) {
     return (
       <div className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
         Carregando…
@@ -162,6 +180,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const displayEmail = profile?.email || user?.email || "";
 
   const handleLogout = async () => {
+    const cloud = await import("@/lib/store/cloud");
+    cloud.setCloudUser(null);
+    // Limpa cache local para o próximo usuário não ver dados anteriores
+    try {
+      const keys = ["psiu:clinics", "psiu:patients", "psiu:appointments", "psiu:day-statuses", "psiu:vacations", "psiu:store:seeded"];
+      for (const k of keys) window.localStorage.removeItem(k);
+    } catch {}
     await signOut();
     navigate({ to: "/auth", replace: true });
   };

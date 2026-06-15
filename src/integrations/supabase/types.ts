@@ -14,6 +14,316 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointments: {
+        Row: {
+          absence_reason: string | null
+          clinic_id: string | null
+          created_at: string
+          data: Json
+          duration_min: number
+          id: string
+          notes: string | null
+          original_date: string | null
+          paid: boolean
+          patient_id: string
+          repasse_confirmed: boolean
+          schedule_id: string | null
+          starts_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          absence_reason?: string | null
+          clinic_id?: string | null
+          created_at?: string
+          data?: Json
+          duration_min?: number
+          id: string
+          notes?: string | null
+          original_date?: string | null
+          paid?: boolean
+          patient_id: string
+          repasse_confirmed?: boolean
+          schedule_id?: string | null
+          starts_at: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          absence_reason?: string | null
+          clinic_id?: string | null
+          created_at?: string
+          data?: Json
+          duration_min?: number
+          id?: string
+          notes?: string | null
+          original_date?: string | null
+          paid?: boolean
+          patient_id?: string
+          repasse_confirmed?: boolean
+          schedule_id?: string | null
+          starts_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_types: {
+        Row: {
+          active: boolean
+          clinic_id: string
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+          value: number
+        }
+        Insert: {
+          active?: boolean
+          clinic_id: string
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+          value?: number
+        }
+        Update: {
+          active?: boolean
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_types_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinics: {
+        Row: {
+          created_at: string
+          custom_payment_days: number | null
+          data: Json
+          default_session_value: number | null
+          id: string
+          name: string
+          notes: string | null
+          payment_term_days: number | null
+          payment_term_type: string | null
+          payment_types: string[]
+          repasse_percent: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_payment_days?: number | null
+          data?: Json
+          default_session_value?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          payment_term_days?: number | null
+          payment_term_type?: string | null
+          payment_types?: string[]
+          repasse_percent?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          custom_payment_days?: number | null
+          data?: Json
+          default_session_value?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          payment_term_days?: number | null
+          payment_term_type?: string | null
+          payment_types?: string[]
+          repasse_percent?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      day_statuses: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      patient_schedules: {
+        Row: {
+          active: boolean
+          created_at: string
+          duration_minutes: number
+          id: string
+          patient_id: string
+          time: string
+          updated_at: string
+          user_id: string
+          weekday: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          duration_minutes?: number
+          id: string
+          patient_id: string
+          time: string
+          updated_at?: string
+          user_id: string
+          weekday: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          patient_id?: string
+          time?: string
+          updated_at?: string
+          user_id?: string
+          weekday?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_schedules_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patients: {
+        Row: {
+          attendance_type_id: string | null
+          attendance_type_name: string | null
+          clinic_id: string | null
+          closed_at: string | null
+          created_at: string
+          data: Json
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          payment_frequency: string
+          payment_type: string
+          phone: string | null
+          session_value: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attendance_type_id?: string | null
+          attendance_type_name?: string | null
+          clinic_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          data?: Json
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          payment_frequency?: string
+          payment_type?: string
+          phone?: string | null
+          session_value?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attendance_type_id?: string | null
+          attendance_type_name?: string | null
+          clinic_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          data?: Json
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          payment_frequency?: string
+          payment_type?: string
+          phone?: string | null
+          session_value?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patients_attendance_type_id_fkey"
+            columns: ["attendance_type_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patients_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -45,6 +355,33 @@ export type Database = {
           nome_profissional?: string | null
           pin?: string | null
           telefone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vacations: {
+        Row: {
+          created_at: string
+          ends_on: string
+          id: string
+          starts_on: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ends_on: string
+          id?: string
+          starts_on: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ends_on?: string
+          id?: string
+          starts_on?: string
           updated_at?: string
           user_id?: string
         }
