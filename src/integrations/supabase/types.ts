@@ -221,7 +221,7 @@ export type Database = {
           active?: boolean
           created_at?: string
           duration_minutes?: number
-          id?: string
+          id: string
           patient_id: string
           time: string
           updated_at?: string
