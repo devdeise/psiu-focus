@@ -144,6 +144,7 @@ export function getClinics(): Clinic[] {
 }
 export function saveClinics(clinics: Clinic[]) {
   write(STORAGE_KEYS.clinics, clinics.map(normalizeClinicPaymentTerm));
+  void import("./cloud").then((m) => m.scheduleSync("clinics"));
 }
 
 // ---------- Patients ----------
