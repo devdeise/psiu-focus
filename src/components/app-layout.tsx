@@ -180,6 +180,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const displayEmail = profile?.email || user?.email || "";
 
   const handleLogout = async () => {
+    const cloud = await import("@/lib/store/cloud");
+    cloud.setCloudUser(null);
+    // Limpa cache local para o próximo usuário não ver dados anteriores
+    try {
+      const keys = ["psiu:clinics", "psiu:patients", "psiu:appointments", "psiu:day-statuses", "psiu:vacations", "psiu:store:seeded"];
+      for (const k of keys) window.localStorage.removeItem(k);
+    } catch {}
     await signOut();
     navigate({ to: "/auth", replace: true });
   };
