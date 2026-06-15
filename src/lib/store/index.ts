@@ -380,6 +380,7 @@ export function getAppointments(): Appointment[] {
 
 export function saveAppointments(items: Appointment[]) {
   write(STORAGE_KEYS.appointments, items);
+  void import("./cloud").then((m) => m.scheduleSync("appointments"));
 }
 
 export function upsertAppointment(item: Appointment) {
