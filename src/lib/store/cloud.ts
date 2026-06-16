@@ -269,6 +269,9 @@ export function pullAllFromCloud(): Promise<void> {
         appsRes,
         dayRes,
         vacRes,
+        clinicPaysRes,
+        monthlyPaysRes,
+        cashRes,
       ] = await Promise.all([
         supabase.from("clinics").select("*").eq("user_id", userId),
         supabase.from("attendance_types").select("*").eq("user_id", userId),
@@ -277,6 +280,9 @@ export function pullAllFromCloud(): Promise<void> {
         supabase.from("appointments").select("*").eq("user_id", userId),
         supabase.from("day_statuses").select("*").eq("user_id", userId),
         supabase.from("vacations").select("*").eq("user_id", userId),
+        supabase.from("clinic_payments").select("*").eq("user_id", userId),
+        supabase.from("monthly_payments").select("*").eq("user_id", userId),
+        supabase.from("cash_entries").select("*").eq("user_id", userId),
       ]);
 
       const atByClinic = new Map<string, ClinicAttendanceType[]>();
