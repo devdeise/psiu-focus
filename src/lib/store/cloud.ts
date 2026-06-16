@@ -639,7 +639,15 @@ function debounce(key: string, fn: () => void, ms = 250) {
 }
 
 export function scheduleSync(
-  collection: "clinics" | "patients" | "appointments" | "dayStatuses" | "vacations",
+  collection:
+    | "clinics"
+    | "patients"
+    | "appointments"
+    | "dayStatuses"
+    | "vacations"
+    | "clinicPayments"
+    | "monthlyPayments"
+    | "cashEntries",
 ) {
   if (!currentUserId || !initialPulled) return;
   debounce(collection, () => {
@@ -660,6 +668,15 @@ export function scheduleSync(
       } else if (collection === "vacations") {
         const items: VacationPeriod[] = JSON.parse(raw(STORAGE_KEYS.vacations) || "[]");
         void syncVacations(items);
+      } else if (collection === "clinicPayments") {
+        const items: ClinicPaymentRecord[] = JSON.parse(raw(STORAGE_KEYS.clinicPayments) || "[]");
+        void syncClinicPayments(items);
+      } else if (collection === "monthlyPayments") {
+        const items: MonthlyPayment[] = JSON.parse(raw(STORAGE_KEYS.monthlyPayments) || "[]");
+        void syncMonthlyPayments(items);
+      } else if (collection === "cashEntries") {
+        const items: CashEntry[] = JSON.parse(raw(STORAGE_KEYS.cashEntries) || "[]");
+        void syncCashEntries(items);
       }
     } catch (err) {
       console.error("[cloud] scheduleSync", err);
