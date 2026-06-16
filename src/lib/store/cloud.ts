@@ -150,6 +150,110 @@ function appointmentToRow(a: Appointment, userId: string) {
   };
 }
 
+// --- mappers para pagamentos / caixa ---
+function clinicPaymentFromRow(row: any): ClinicPaymentRecord {
+  return {
+    id: row.id,
+    clinicId: row.clinic_id,
+    month: row.month,
+    amount: Number(row.amount ?? 0),
+    expectedAmount: row.expected_amount != null ? Number(row.expected_amount) : undefined,
+    discountAmount: row.discount_amount != null ? Number(row.discount_amount) : undefined,
+    appointmentIds: Array.isArray(row.appointment_ids) ? row.appointment_ids : [],
+    status: row.status,
+    receivedMonth: row.received_month,
+    delayed: !!row.delayed,
+    confirmedAt: row.confirmed_at ?? ts(),
+    notes: row.notes ?? undefined,
+  };
+}
+function clinicPaymentToRow(p: ClinicPaymentRecord, userId: string) {
+  return {
+    id: p.id,
+    user_id: userId,
+    clinic_id: p.clinicId,
+    month: p.month,
+    amount: p.amount ?? 0,
+    expected_amount: p.expectedAmount ?? null,
+    discount_amount: p.discountAmount ?? null,
+    appointment_ids: p.appointmentIds ?? [],
+    status: p.status,
+    received_month: p.receivedMonth,
+    delayed: !!p.delayed,
+    confirmed_at: p.confirmedAt,
+    notes: p.notes ?? null,
+  };
+}
+
+function monthlyPaymentFromRow(row: any): MonthlyPayment {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    month: row.month,
+    amountDue: row.amount_due != null ? Number(row.amount_due) : undefined,
+    amountReceived: row.amount_received != null ? Number(row.amount_received) : undefined,
+    status: row.status ?? undefined,
+    appointmentId: row.appointment_id ?? undefined,
+    receivedMonth: row.received_month ?? undefined,
+    delayed: !!row.delayed,
+    source: row.source ?? undefined,
+    notes: row.notes ?? undefined,
+    paidAt: row.paid_at ?? ts(),
+  };
+}
+function monthlyPaymentToRow(p: MonthlyPayment, userId: string) {
+  return {
+    id: p.id,
+    user_id: userId,
+    patient_id: p.patientId,
+    month: p.month,
+    amount_due: p.amountDue ?? null,
+    amount_received: p.amountReceived ?? null,
+    status: p.status ?? null,
+    appointment_id: p.appointmentId ?? null,
+    received_month: p.receivedMonth ?? null,
+    delayed: !!p.delayed,
+    source: p.source ?? null,
+    notes: p.notes ?? null,
+    paid_at: p.paidAt,
+  };
+}
+
+function cashEntryFromRow(row: any): CashEntry {
+  return {
+    id: row.id,
+    source: row.source,
+    patientId: row.patient_id ?? undefined,
+    clinicId: row.clinic_id ?? undefined,
+    appointmentId: row.appointment_id ?? undefined,
+    month: row.month ?? undefined,
+    receivedMonth: row.received_month,
+    delayed: !!row.delayed,
+    expectedAmount: row.expected_amount != null ? Number(row.expected_amount) : undefined,
+    discountAmount: row.discount_amount != null ? Number(row.discount_amount) : undefined,
+    amount: Number(row.amount ?? 0),
+    createdAt: row.created_at ?? ts(),
+    notes: row.notes ?? undefined,
+  };
+}
+function cashEntryToRow(c: CashEntry, userId: string) {
+  return {
+    id: c.id,
+    user_id: userId,
+    source: c.source,
+    patient_id: c.patientId ?? null,
+    clinic_id: c.clinicId ?? null,
+    appointment_id: c.appointmentId ?? null,
+    month: c.month ?? null,
+    received_month: c.receivedMonth,
+    delayed: !!c.delayed,
+    expected_amount: c.expectedAmount ?? null,
+    discount_amount: c.discountAmount ?? null,
+    amount: c.amount ?? 0,
+    notes: c.notes ?? null,
+  };
+}
+
 // --- pull (cloud → local) ---
 export function pullAllFromCloud(): Promise<void> {
   if (!currentUserId) return Promise.resolve();
