@@ -356,6 +356,7 @@ export function getClinicPaymentRecords(): ClinicPaymentRecord[] {
 
 export function saveClinicPaymentRecords(items: ClinicPaymentRecord[]) {
   write(STORAGE_KEYS.clinicPayments, items);
+  void import("./cloud").then((m) => m.scheduleSync("clinicPayments"));
 }
 
 export function upsertClinicPaymentRecord(record: Omit<ClinicPaymentRecord, "id" | "confirmedAt">) {
