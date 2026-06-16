@@ -237,6 +237,7 @@ export function getMonthlyPayments(): MonthlyPayment[] {
 
 export function saveMonthlyPayments(items: MonthlyPayment[]) {
   write(STORAGE_KEYS.monthlyPayments, items);
+  void import("./cloud").then((m) => m.scheduleSync("monthlyPayments"));
 }
 
 export function getMonthlyPaymentSummary(patientId: string, month: string, amountDue = 0) {
@@ -335,6 +336,7 @@ export function getCashEntries(): CashEntry[] {
 
 export function saveCashEntries(items: CashEntry[]) {
   write(STORAGE_KEYS.cashEntries, items);
+  void import("./cloud").then((m) => m.scheduleSync("cashEntries"));
 }
 
 export function addCashEntry(entry: Omit<CashEntry, "id" | "createdAt">) {
@@ -354,6 +356,7 @@ export function getClinicPaymentRecords(): ClinicPaymentRecord[] {
 
 export function saveClinicPaymentRecords(items: ClinicPaymentRecord[]) {
   write(STORAGE_KEYS.clinicPayments, items);
+  void import("./cloud").then((m) => m.scheduleSync("clinicPayments"));
 }
 
 export function upsertClinicPaymentRecord(record: Omit<ClinicPaymentRecord, "id" | "confirmedAt">) {

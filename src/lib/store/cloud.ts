@@ -5,9 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { STORAGE_KEYS } from "./index";
 import type {
   Appointment,
+  CashEntry,
   Clinic,
   ClinicAttendanceType,
+  ClinicPaymentRecord,
   DayStatusRecord,
+  MonthlyPayment,
   Patient,
   PatientSchedule,
   VacationPeriod,
@@ -147,6 +150,110 @@ function appointmentToRow(a: Appointment, userId: string) {
   };
 }
 
+// --- mappers para pagamentos / caixa ---
+function clinicPaymentFromRow(row: any): ClinicPaymentRecord {
+  return {
+    id: row.id,
+    clinicId: row.clinic_id,
+    month: row.month,
+    amount: Number(row.amount ?? 0),
+    expectedAmount: row.expected_amount != null ? Number(row.expected_amount) : undefined,
+    discountAmount: row.discount_amount != null ? Number(row.discount_amount) : undefined,
+    appointmentIds: Array.isArray(row.appointment_ids) ? row.appointment_ids : [],
+    status: row.status,
+    receivedMonth: row.received_month,
+    delayed: !!row.delayed,
+    confirmedAt: row.confirmed_at ?? ts(),
+    notes: row.notes ?? undefined,
+  };
+}
+function clinicPaymentToRow(p: ClinicPaymentRecord, userId: string) {
+  return {
+    id: p.id,
+    user_id: userId,
+    clinic_id: p.clinicId,
+    month: p.month,
+    amount: p.amount ?? 0,
+    expected_amount: p.expectedAmount ?? null,
+    discount_amount: p.discountAmount ?? null,
+    appointment_ids: p.appointmentIds ?? [],
+    status: p.status,
+    received_month: p.receivedMonth,
+    delayed: !!p.delayed,
+    confirmed_at: p.confirmedAt,
+    notes: p.notes ?? null,
+  };
+}
+
+function monthlyPaymentFromRow(row: any): MonthlyPayment {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    month: row.month,
+    amountDue: row.amount_due != null ? Number(row.amount_due) : undefined,
+    amountReceived: row.amount_received != null ? Number(row.amount_received) : undefined,
+    status: row.status ?? undefined,
+    appointmentId: row.appointment_id ?? undefined,
+    receivedMonth: row.received_month ?? undefined,
+    delayed: !!row.delayed,
+    source: row.source ?? undefined,
+    notes: row.notes ?? undefined,
+    paidAt: row.paid_at ?? ts(),
+  };
+}
+function monthlyPaymentToRow(p: MonthlyPayment, userId: string) {
+  return {
+    id: p.id,
+    user_id: userId,
+    patient_id: p.patientId,
+    month: p.month,
+    amount_due: p.amountDue ?? null,
+    amount_received: p.amountReceived ?? null,
+    status: p.status ?? null,
+    appointment_id: p.appointmentId ?? null,
+    received_month: p.receivedMonth ?? null,
+    delayed: !!p.delayed,
+    source: p.source ?? null,
+    notes: p.notes ?? null,
+    paid_at: p.paidAt,
+  };
+}
+
+function cashEntryFromRow(row: any): CashEntry {
+  return {
+    id: row.id,
+    source: row.source,
+    patientId: row.patient_id ?? undefined,
+    clinicId: row.clinic_id ?? undefined,
+    appointmentId: row.appointment_id ?? undefined,
+    month: row.month ?? undefined,
+    receivedMonth: row.received_month,
+    delayed: !!row.delayed,
+    expectedAmount: row.expected_amount != null ? Number(row.expected_amount) : undefined,
+    discountAmount: row.discount_amount != null ? Number(row.discount_amount) : undefined,
+    amount: Number(row.amount ?? 0),
+    createdAt: row.created_at ?? ts(),
+    notes: row.notes ?? undefined,
+  };
+}
+function cashEntryToRow(c: CashEntry, userId: string) {
+  return {
+    id: c.id,
+    user_id: userId,
+    source: c.source,
+    patient_id: c.patientId ?? null,
+    clinic_id: c.clinicId ?? null,
+    appointment_id: c.appointmentId ?? null,
+    month: c.month ?? null,
+    received_month: c.receivedMonth,
+    delayed: !!c.delayed,
+    expected_amount: c.expectedAmount ?? null,
+    discount_amount: c.discountAmount ?? null,
+    amount: c.amount ?? 0,
+    notes: c.notes ?? null,
+  };
+}
+
 // --- pull (cloud → local) ---
 export function pullAllFromCloud(): Promise<void> {
   if (!currentUserId) return Promise.resolve();
@@ -162,6 +269,9 @@ export function pullAllFromCloud(): Promise<void> {
         appsRes,
         dayRes,
         vacRes,
+        clinicPaysRes,
+        monthlyPaysRes,
+        cashRes,
       ] = await Promise.all([
         supabase.from("clinics").select("*").eq("user_id", userId),
         supabase.from("attendance_types").select("*").eq("user_id", userId),
@@ -170,6 +280,9 @@ export function pullAllFromCloud(): Promise<void> {
         supabase.from("appointments").select("*").eq("user_id", userId),
         supabase.from("day_statuses").select("*").eq("user_id", userId),
         supabase.from("vacations").select("*").eq("user_id", userId),
+        supabase.from("clinic_payments").select("*").eq("user_id", userId),
+        supabase.from("monthly_payments").select("*").eq("user_id", userId),
+        supabase.from("cash_entries").select("*").eq("user_id", userId),
       ]);
 
       const atByClinic = new Map<string, ClinicAttendanceType[]>();
@@ -209,28 +322,34 @@ export function pullAllFromCloud(): Promise<void> {
         endsOn: r.ends_on,
       }));
 
+      const clinicPayments: ClinicPaymentRecord[] = (clinicPaysRes.data ?? []).map(clinicPaymentFromRow);
+      const monthlyPayments: MonthlyPayment[] = (monthlyPaysRes.data ?? []).map(monthlyPaymentFromRow);
+      const cashEntries: CashEntry[] = (cashRes.data ?? []).map(cashEntryFromRow);
+
       const isEmpty =
         !clinics.length &&
         !patients.length &&
         !appointments.length &&
         !dayStatuses.length &&
-        !vacations.length;
+        !vacations.length &&
+        !clinicPayments.length &&
+        !monthlyPayments.length &&
+        !cashEntries.length;
 
       if (isEmpty) {
-        // Cloud está vazio. Mantém localStorage atual (pode ter seed) e
-        // marca para sincronização posterior via push.
         initialPulled = true;
-        // Push do estado local atual (caso seed tenha rodado) para popular o cloud.
         await pushAllLocalToCloud();
         return;
       }
 
-      // Substitui localStorage pelo snapshot do cloud
       window.localStorage.setItem(STORAGE_KEYS.clinics, JSON.stringify(clinics));
       window.localStorage.setItem(STORAGE_KEYS.patients, JSON.stringify(patients));
       window.localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(appointments));
       window.localStorage.setItem(STORAGE_KEYS.dayStatuses, JSON.stringify(dayStatuses));
       window.localStorage.setItem(STORAGE_KEYS.vacations, JSON.stringify(vacations));
+      window.localStorage.setItem(STORAGE_KEYS.clinicPayments, JSON.stringify(clinicPayments));
+      window.localStorage.setItem(STORAGE_KEYS.monthlyPayments, JSON.stringify(monthlyPayments));
+      window.localStorage.setItem(STORAGE_KEYS.cashEntries, JSON.stringify(cashEntries));
       window.localStorage.setItem(STORAGE_KEYS.seeded, "1");
       initialPulled = true;
     } catch (err) {
@@ -250,12 +369,18 @@ async function pushAllLocalToCloud() {
     const apps: Appointment[] = JSON.parse(raw(STORAGE_KEYS.appointments) || "[]");
     const days: DayStatusRecord[] = JSON.parse(raw(STORAGE_KEYS.dayStatuses) || "[]");
     const vacs: VacationPeriod[] = JSON.parse(raw(STORAGE_KEYS.vacations) || "[]");
+    const cps: ClinicPaymentRecord[] = JSON.parse(raw(STORAGE_KEYS.clinicPayments) || "[]");
+    const mps: MonthlyPayment[] = JSON.parse(raw(STORAGE_KEYS.monthlyPayments) || "[]");
+    const ces: CashEntry[] = JSON.parse(raw(STORAGE_KEYS.cashEntries) || "[]");
     await Promise.all([
       syncClinics(clinics),
       syncPatients(patients),
       syncAppointments(apps),
       syncDayStatuses(days),
       syncVacations(vacs),
+      syncClinicPayments(cps),
+      syncMonthlyPayments(mps),
+      syncCashEntries(ces),
     ]);
   } catch (err) {
     console.error("[cloud] pushAllLocalToCloud", err);
@@ -428,6 +553,84 @@ export async function syncVacations(items: VacationPeriod[]) {
   }
 }
 
+export async function syncClinicPayments(items: ClinicPaymentRecord[]) {
+  if (!currentUserId || !initialPulled) return;
+  const userId = currentUserId;
+  try {
+    const { data: existing } = await supabase
+      .from("clinic_payments")
+      .select("id")
+      .eq("user_id", userId);
+    const existingIds = new Set((existing ?? []).map((r: any) => r.id));
+    const localIds = new Set(items.map((i) => i.id));
+    if (items.length) {
+      const rows = items.map((i) => clinicPaymentToRow(i, userId));
+      const { error } = await supabase
+        .from("clinic_payments")
+        .upsert(rows, { onConflict: "id" });
+      if (error) console.error("[cloud] upsert clinic_payments", error);
+    }
+    const toDelete = [...existingIds].filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await supabase.from("clinic_payments").delete().in("id", toDelete).eq("user_id", userId);
+    }
+  } catch (err) {
+    console.error("[cloud] syncClinicPayments", err);
+  }
+}
+
+export async function syncMonthlyPayments(items: MonthlyPayment[]) {
+  if (!currentUserId || !initialPulled) return;
+  const userId = currentUserId;
+  try {
+    const { data: existing } = await supabase
+      .from("monthly_payments")
+      .select("id")
+      .eq("user_id", userId);
+    const existingIds = new Set((existing ?? []).map((r: any) => r.id));
+    const localIds = new Set(items.map((i) => i.id));
+    if (items.length) {
+      const rows = items.map((i) => monthlyPaymentToRow(i, userId));
+      const { error } = await supabase
+        .from("monthly_payments")
+        .upsert(rows, { onConflict: "id" });
+      if (error) console.error("[cloud] upsert monthly_payments", error);
+    }
+    const toDelete = [...existingIds].filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await supabase.from("monthly_payments").delete().in("id", toDelete).eq("user_id", userId);
+    }
+  } catch (err) {
+    console.error("[cloud] syncMonthlyPayments", err);
+  }
+}
+
+export async function syncCashEntries(items: CashEntry[]) {
+  if (!currentUserId || !initialPulled) return;
+  const userId = currentUserId;
+  try {
+    const { data: existing } = await supabase
+      .from("cash_entries")
+      .select("id")
+      .eq("user_id", userId);
+    const existingIds = new Set((existing ?? []).map((r: any) => r.id));
+    const localIds = new Set(items.map((i) => i.id));
+    if (items.length) {
+      const rows = items.map((i) => cashEntryToRow(i, userId));
+      const { error } = await supabase
+        .from("cash_entries")
+        .upsert(rows, { onConflict: "id" });
+      if (error) console.error("[cloud] upsert cash_entries", error);
+    }
+    const toDelete = [...existingIds].filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await supabase.from("cash_entries").delete().in("id", toDelete).eq("user_id", userId);
+    }
+  } catch (err) {
+    console.error("[cloud] syncCashEntries", err);
+  }
+}
+
 // Debounce simples por coleção
 const timers: Record<string, ReturnType<typeof setTimeout>> = {};
 function debounce(key: string, fn: () => void, ms = 250) {
@@ -436,7 +639,15 @@ function debounce(key: string, fn: () => void, ms = 250) {
 }
 
 export function scheduleSync(
-  collection: "clinics" | "patients" | "appointments" | "dayStatuses" | "vacations",
+  collection:
+    | "clinics"
+    | "patients"
+    | "appointments"
+    | "dayStatuses"
+    | "vacations"
+    | "clinicPayments"
+    | "monthlyPayments"
+    | "cashEntries",
 ) {
   if (!currentUserId || !initialPulled) return;
   debounce(collection, () => {
@@ -457,6 +668,15 @@ export function scheduleSync(
       } else if (collection === "vacations") {
         const items: VacationPeriod[] = JSON.parse(raw(STORAGE_KEYS.vacations) || "[]");
         void syncVacations(items);
+      } else if (collection === "clinicPayments") {
+        const items: ClinicPaymentRecord[] = JSON.parse(raw(STORAGE_KEYS.clinicPayments) || "[]");
+        void syncClinicPayments(items);
+      } else if (collection === "monthlyPayments") {
+        const items: MonthlyPayment[] = JSON.parse(raw(STORAGE_KEYS.monthlyPayments) || "[]");
+        void syncMonthlyPayments(items);
+      } else if (collection === "cashEntries") {
+        const items: CashEntry[] = JSON.parse(raw(STORAGE_KEYS.cashEntries) || "[]");
+        void syncCashEntries(items);
       }
     } catch (err) {
       console.error("[cloud] scheduleSync", err);

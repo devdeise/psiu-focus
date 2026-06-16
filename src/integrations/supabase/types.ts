@@ -127,6 +127,114 @@ export type Database = {
           },
         ]
       }
+      cash_entries: {
+        Row: {
+          amount: number
+          appointment_id: string | null
+          clinic_id: string | null
+          created_at: string
+          delayed: boolean | null
+          discount_amount: number | null
+          expected_amount: number | null
+          id: string
+          month: string | null
+          notes: string | null
+          patient_id: string | null
+          received_month: string
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          appointment_id?: string | null
+          clinic_id?: string | null
+          created_at?: string
+          delayed?: boolean | null
+          discount_amount?: number | null
+          expected_amount?: number | null
+          id?: string
+          month?: string | null
+          notes?: string | null
+          patient_id?: string | null
+          received_month: string
+          source: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          clinic_id?: string | null
+          created_at?: string
+          delayed?: boolean | null
+          discount_amount?: number | null
+          expected_amount?: number | null
+          id?: string
+          month?: string | null
+          notes?: string | null
+          patient_id?: string | null
+          received_month?: string
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      clinic_payments: {
+        Row: {
+          amount: number
+          appointment_ids: Json
+          clinic_id: string
+          confirmed_at: string
+          created_at: string
+          delayed: boolean
+          discount_amount: number | null
+          expected_amount: number | null
+          id: string
+          month: string
+          notes: string | null
+          received_month: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          appointment_ids?: Json
+          clinic_id: string
+          confirmed_at?: string
+          created_at?: string
+          delayed?: boolean
+          discount_amount?: number | null
+          expected_amount?: number | null
+          id?: string
+          month: string
+          notes?: string | null
+          received_month: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          appointment_ids?: Json
+          clinic_id?: string
+          confirmed_at?: string
+          created_at?: string
+          delayed?: boolean
+          discount_amount?: number | null
+          expected_amount?: number | null
+          id?: string
+          month?: string
+          notes?: string | null
+          received_month?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       clinics: {
         Row: {
           created_at: string
@@ -200,6 +308,60 @@ export type Database = {
           date?: string
           id?: string
           status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      monthly_payments: {
+        Row: {
+          amount_due: number | null
+          amount_received: number | null
+          appointment_id: string | null
+          created_at: string
+          delayed: boolean | null
+          id: string
+          month: string
+          notes: string | null
+          paid_at: string
+          patient_id: string
+          received_month: string | null
+          source: string | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_due?: number | null
+          amount_received?: number | null
+          appointment_id?: string | null
+          created_at?: string
+          delayed?: boolean | null
+          id?: string
+          month: string
+          notes?: string | null
+          paid_at?: string
+          patient_id: string
+          received_month?: string | null
+          source?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_due?: number | null
+          amount_received?: number | null
+          appointment_id?: string | null
+          created_at?: string
+          delayed?: boolean | null
+          id?: string
+          month?: string
+          notes?: string | null
+          paid_at?: string
+          patient_id?: string
+          received_month?: string | null
+          source?: string | null
+          status?: string | null
           updated_at?: string
           user_id?: string
         }

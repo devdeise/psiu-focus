@@ -1,60 +1,84 @@
+## Fases Backend 4, 5 e 6 — PSIU!
 
-## Fase Backend Base — Auth + Perfil
+Esta é uma fase grande (migrar pagamentos, finanças e finalizar a saída do localStorage). Apresento o plano antes de implementar para você validar a abordagem.
 
-Lovable Cloud já foi ativado neste turno. A próxima entrega cria autenticação e perfil, mantendo intactos: Agenda, Cadastro, Confirmar Pagamento, Finanças, layout dark/neon e localStorage atual.
+### Estratégia geral
 
-### 1. Schema (migration)
+Vou seguir o mesmo padrão híbrido já usado nas Fases 2/3:
+- Mantém as estruturas atuais do `localStorage` como cache local síncrono (compatível com a UI atual sem reescrita).
+- Adiciona persistência no Lovable Cloud via camada `cloud.ts` (push debounce + pull on login).
+- Cada novo registro recebe `user_id` do usuário logado; RLS garante isolamento.
 
-Tabela `public.profiles`:
-- `id uuid pk default gen_random_uuid()`
-- `user_id uuid not null unique references auth.users(id) on delete cascade`
-- `nome text`, `email text`, `telefone text`, `nome_profissional text`, `pin text`
-- `created_at`, `updated_at timestamptz default now()`
-- GRANTs para `authenticated` + `service_role`
-- RLS habilitado, política única: `auth.uid() = user_id` para SELECT/INSERT/UPDATE/DELETE
-- Trigger `handle_new_user` em `auth.users` → cria profile básico com `nome` = metadata.full_name ou email
+Assim, **Confirmar Pagamento** e **Finanças** continuam funcionando visualmente como hoje, apenas passam a sincronizar com a nuvem.
 
-### 2. Auth — configuração
-- Configurar provider Google via `supabase--configure_social_auth`
-- Email signup auto-confirm habilitado (sem verificação por email)
+---
 
-### 3. Tela `/auth`
-Nova rota pública `src/routes/auth.tsx` com visual dark/neon do PSIU!:
-- Tabs Entrar / Criar conta
-- Email + senha (sem alert/prompt/confirm)
-- Botão "Continuar com Google" via `lovable.auth.signInWithOAuth("google")`
-- Estados de loading + mensagens de erro inline (toast `sonner`)
-- Após login → redirect para `/`
+### FASE BACKEND 4 — Pagamentos
 
-### 4. Proteção de rotas
-- Criar `src/routes/_authenticated/route.tsx` (layout gate, `ssr:false`, redirect → `/auth`)
-- Mover rotas internas para o layout `_authenticated`: `index`, `agenda`, `cadastro`, `confirmar-pagamento`, `financas`, `analise-faltas`, `anotacoes`, `perfil`
-  - Arquivos renomeados de `src/routes/<x>.tsx` → `src/routes/_authenticated/<x>.tsx`
-  - Sem mudança de URL (`_authenticated` é pathless)
+**1. Migrations (2 tabelas novas):**
 
-### 5. Perfil
-Atualizar `src/routes/_authenticated/perfil.tsx`:
-- Buscar/criar profile do usuário logado via `supabase.from("profiles")`
-- Editar nome, email, telefone, nome profissional → salva no Cloud
-- PIN continua local (já existente), mantém comportamento
-- Botão "Sair" (signOut + redirect /auth)
+- `clinic_payments` — campos: `clinic_id`, `competencia`, `mes_previsto`, `valor_previsto`, `quantidade_atendimentos`, `status` (aguardando/atrasado/confirmado), `houve_atraso`, `mes_computado_caixa`, `houve_desconto`, `desconto_informado`, `valor_real_recebido`, `observacao`, `confirmado_em`.
+- `patient_payments` — campos: `patient_id`, `atendimento_id` (nullable), `modelo` (por_sessao/mensal), `competencia`, `valor_total`, `valor_recebido`, `saldo_pendente`, `status` (pendente/parcial/pago), `houve_atraso`, `mes_computado_caixa`, `observacao`, `confirmado_em`.
 
-### 6. Sidebar
-`src/components/app-layout.tsx`:
-- Mostrar nome do profile logado (fallback: email)
-- Botão logout no rodapé do sidebar
+Ambas com RLS `auth.uid() = user_id`, GRANT para `authenticated` + `service_role`, trigger `updated_at`.
 
-### 7. Correções de build pré-existentes (bloqueiam deploy)
-Erros já existentes no projeto que impedem build:
-- `agenda.tsx` linha 235: tipar `AgendaItem` com `patient` requerido e `clinic` opcional; importar/recriar helper `dateKeyFromIso` (provavelmente `iso.slice(0,10)`)
-- `cadastro.tsx` linha 1164: ajustar handler do botão `Salvar paciente` para `() => submitPatient()`
-- `financas.tsx` linha 170: tipar retorno de `loadVisibleCards` como `CardId[]`
+**2. Camada de sync (`src/lib/store/cloud.ts`):**
+- Adicionar `pullClinicPayments`, `pullPatientPayments` no pull inicial.
+- Adicionar `pushClinicPayments`, `pushPatientPayments` (upsert por id).
+- Hookar nos saves do store.
 
-### Fora do escopo desta fase
-- Migração de clínicas/pacientes/agenda/pagamentos para Cloud
-- Limpeza do localStorage antigo
-- Reset password / recuperação por email
-- Qualquer alteração em regras financeiras, agenda, cadastro, faltas, repasse
+**3. Store (`src/lib/store/index.ts`):**
+- Já existem `loadClinicPayments`, `loadPatientPayments` (ou similares) — confirmar e plugar `scheduleSync`.
+- Onde não existirem, adicionar.
 
-### Critérios de aceite
-Conforme PRD: criar conta, login, logout, sessão persistente, rotas internas protegidas, redirect → /auth, perfil lido/salvo no Cloud, visual preservado, regras não alteradas, localStorage preservado.
+**4. UI `confirmar-pagamento.tsx`:**
+- Já implementa modais de clínica (atraso + desconto), particular sessão e particular mensal (parcial/quitação). Vou auditar e ajustar conforme regras detalhadas (status atrasado computado por mês previsto vs hoje, validações de desconto, etc.).
+- Histórico: garantir filtro por `mes_computado_caixa`, exibir colunas pedidas, botão Editar + modal de PIN (validar contra `profiles.pin`).
+- Garantir zero `alert/prompt/confirm` nativos.
+
+---
+
+### FASE BACKEND 5 — Finanças
+
+`financas.tsx` já existe e calcula sobre dados locais. Vou:
+
+1. Garantir que lê de `loadClinicPayments` / `loadPatientPayments` / `loadAppointments` (que agora vêm do Cloud sincronizado).
+2. Ajustar os cards conforme regras:
+   - **Atingido** = realizados / previstos.
+   - **Previsão de Pagamento** = produção prevista (clínica usa `data + prazo`); não subtrai desconto.
+   - **Recebido no Caixa** = soma `valor_real_recebido` / `valor_recebido` por `mes_computado_caixa`, separando No prazo / Atrasados recebidos + linha Desconto informado (não soma no principal).
+   - **Aguardando Pagamento Clínicas** = `clinic_payments` com status aguardando/atrasado no período.
+   - **Particulares Pendentes** = `patient_payments` pendente/parcial.
+   - **Perdas Operacionais** = faltas/cancelamentos × valor; NÃO inclui desconto.
+   - **Ranking / Clínica mais rentável** = valor cheio produzido por clínica/competência.
+3. Todos respeitam o filtro de período já existente.
+
+---
+
+### FASE BACKEND 6 — Migração final e limpeza
+
+1. **Botão de migração** em Perfil: "Importar dados antigos do dispositivo" → modal de confirmação → faz upsert de tudo do localStorage para o Cloud associado ao `user_id`; mostra toast de sucesso/erro; evita duplicidades via id.
+2. **Localstorage** continua como cache de leitura (espelho do Cloud), mas o Cloud passa a ser fonte de verdade — no logout o cache é limpo (já implementado).
+3. **Testes ponta a ponta**: vou rodar build, abrir o preview, validar fluxos críticos (criar conta, criar clínica/paciente, agenda, confirmar pagamento c/ e s/ atraso e desconto, parcial, quitação, histórico c/ PIN, recarregar página, isolamento por usuário).
+4. **Polimento**: revisar estados vazios, toasts (sonner), loading, ausência de `alert/prompt/confirm`.
+
+---
+
+### Restrições respeitadas
+
+- Sem Supabase externo, sem API/login paralelos.
+- Visual dark/neon preservado, modais próprios.
+- Regras Agenda/Cadastro/Perfil intocadas.
+- RLS isola dados por usuário em todas as novas tabelas.
+
+---
+
+### Riscos / pontos de atenção
+
+- `confirmar-pagamento.tsx` tem 2008 linhas — a auditoria das regras de modal e histórico pode revelar divergências com o spec; vou ajustar pontualmente sem reescrever do zero.
+- `financas.tsx` (878 linhas) já tem muita lógica; vou plugar nas novas fontes mantendo a estrutura.
+- Por ser uma única entrega muito grande, sugiro **executar em 3 turnos** (uma fase por turno) para você validar incrementalmente. Posso também fazer tudo em sequência se preferir.
+
+**Como prefere prosseguir?**
+- (A) Executar Fase 4 agora, validar, depois 5, depois 6.
+- (B) Executar as três em sequência sem pausa.
