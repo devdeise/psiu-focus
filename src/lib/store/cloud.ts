@@ -369,12 +369,18 @@ async function pushAllLocalToCloud() {
     const apps: Appointment[] = JSON.parse(raw(STORAGE_KEYS.appointments) || "[]");
     const days: DayStatusRecord[] = JSON.parse(raw(STORAGE_KEYS.dayStatuses) || "[]");
     const vacs: VacationPeriod[] = JSON.parse(raw(STORAGE_KEYS.vacations) || "[]");
+    const cps: ClinicPaymentRecord[] = JSON.parse(raw(STORAGE_KEYS.clinicPayments) || "[]");
+    const mps: MonthlyPayment[] = JSON.parse(raw(STORAGE_KEYS.monthlyPayments) || "[]");
+    const ces: CashEntry[] = JSON.parse(raw(STORAGE_KEYS.cashEntries) || "[]");
     await Promise.all([
       syncClinics(clinics),
       syncPatients(patients),
       syncAppointments(apps),
       syncDayStatuses(days),
       syncVacations(vacs),
+      syncClinicPayments(cps),
+      syncMonthlyPayments(mps),
+      syncCashEntries(ces),
     ]);
   } catch (err) {
     console.error("[cloud] pushAllLocalToCloud", err);
