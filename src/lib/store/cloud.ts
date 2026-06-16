@@ -322,28 +322,34 @@ export function pullAllFromCloud(): Promise<void> {
         endsOn: r.ends_on,
       }));
 
+      const clinicPayments: ClinicPaymentRecord[] = (clinicPaysRes.data ?? []).map(clinicPaymentFromRow);
+      const monthlyPayments: MonthlyPayment[] = (monthlyPaysRes.data ?? []).map(monthlyPaymentFromRow);
+      const cashEntries: CashEntry[] = (cashRes.data ?? []).map(cashEntryFromRow);
+
       const isEmpty =
         !clinics.length &&
         !patients.length &&
         !appointments.length &&
         !dayStatuses.length &&
-        !vacations.length;
+        !vacations.length &&
+        !clinicPayments.length &&
+        !monthlyPayments.length &&
+        !cashEntries.length;
 
       if (isEmpty) {
-        // Cloud está vazio. Mantém localStorage atual (pode ter seed) e
-        // marca para sincronização posterior via push.
         initialPulled = true;
-        // Push do estado local atual (caso seed tenha rodado) para popular o cloud.
         await pushAllLocalToCloud();
         return;
       }
 
-      // Substitui localStorage pelo snapshot do cloud
       window.localStorage.setItem(STORAGE_KEYS.clinics, JSON.stringify(clinics));
       window.localStorage.setItem(STORAGE_KEYS.patients, JSON.stringify(patients));
       window.localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(appointments));
       window.localStorage.setItem(STORAGE_KEYS.dayStatuses, JSON.stringify(dayStatuses));
       window.localStorage.setItem(STORAGE_KEYS.vacations, JSON.stringify(vacations));
+      window.localStorage.setItem(STORAGE_KEYS.clinicPayments, JSON.stringify(clinicPayments));
+      window.localStorage.setItem(STORAGE_KEYS.monthlyPayments, JSON.stringify(monthlyPayments));
+      window.localStorage.setItem(STORAGE_KEYS.cashEntries, JSON.stringify(cashEntries));
       window.localStorage.setItem(STORAGE_KEYS.seeded, "1");
       initialPulled = true;
     } catch (err) {
