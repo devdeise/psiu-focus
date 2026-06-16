@@ -553,6 +553,84 @@ export async function syncVacations(items: VacationPeriod[]) {
   }
 }
 
+export async function syncClinicPayments(items: ClinicPaymentRecord[]) {
+  if (!currentUserId || !initialPulled) return;
+  const userId = currentUserId;
+  try {
+    const { data: existing } = await supabase
+      .from("clinic_payments")
+      .select("id")
+      .eq("user_id", userId);
+    const existingIds = new Set((existing ?? []).map((r: any) => r.id));
+    const localIds = new Set(items.map((i) => i.id));
+    if (items.length) {
+      const rows = items.map((i) => clinicPaymentToRow(i, userId));
+      const { error } = await supabase
+        .from("clinic_payments")
+        .upsert(rows, { onConflict: "id" });
+      if (error) console.error("[cloud] upsert clinic_payments", error);
+    }
+    const toDelete = [...existingIds].filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await supabase.from("clinic_payments").delete().in("id", toDelete).eq("user_id", userId);
+    }
+  } catch (err) {
+    console.error("[cloud] syncClinicPayments", err);
+  }
+}
+
+export async function syncMonthlyPayments(items: MonthlyPayment[]) {
+  if (!currentUserId || !initialPulled) return;
+  const userId = currentUserId;
+  try {
+    const { data: existing } = await supabase
+      .from("monthly_payments")
+      .select("id")
+      .eq("user_id", userId);
+    const existingIds = new Set((existing ?? []).map((r: any) => r.id));
+    const localIds = new Set(items.map((i) => i.id));
+    if (items.length) {
+      const rows = items.map((i) => monthlyPaymentToRow(i, userId));
+      const { error } = await supabase
+        .from("monthly_payments")
+        .upsert(rows, { onConflict: "id" });
+      if (error) console.error("[cloud] upsert monthly_payments", error);
+    }
+    const toDelete = [...existingIds].filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await supabase.from("monthly_payments").delete().in("id", toDelete).eq("user_id", userId);
+    }
+  } catch (err) {
+    console.error("[cloud] syncMonthlyPayments", err);
+  }
+}
+
+export async function syncCashEntries(items: CashEntry[]) {
+  if (!currentUserId || !initialPulled) return;
+  const userId = currentUserId;
+  try {
+    const { data: existing } = await supabase
+      .from("cash_entries")
+      .select("id")
+      .eq("user_id", userId);
+    const existingIds = new Set((existing ?? []).map((r: any) => r.id));
+    const localIds = new Set(items.map((i) => i.id));
+    if (items.length) {
+      const rows = items.map((i) => cashEntryToRow(i, userId));
+      const { error } = await supabase
+        .from("cash_entries")
+        .upsert(rows, { onConflict: "id" });
+      if (error) console.error("[cloud] upsert cash_entries", error);
+    }
+    const toDelete = [...existingIds].filter((id) => !localIds.has(id));
+    if (toDelete.length) {
+      await supabase.from("cash_entries").delete().in("id", toDelete).eq("user_id", userId);
+    }
+  } catch (err) {
+    console.error("[cloud] syncCashEntries", err);
+  }
+}
+
 // Debounce simples por coleção
 const timers: Record<string, ReturnType<typeof setTimeout>> = {};
 function debounce(key: string, fn: () => void, ms = 250) {
