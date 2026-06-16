@@ -336,6 +336,7 @@ export function getCashEntries(): CashEntry[] {
 
 export function saveCashEntries(items: CashEntry[]) {
   write(STORAGE_KEYS.cashEntries, items);
+  void import("./cloud").then((m) => m.scheduleSync("cashEntries"));
 }
 
 export function addCashEntry(entry: Omit<CashEntry, "id" | "createdAt">) {
