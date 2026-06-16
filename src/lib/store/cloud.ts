@@ -5,9 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { STORAGE_KEYS } from "./index";
 import type {
   Appointment,
+  CashEntry,
   Clinic,
   ClinicAttendanceType,
+  ClinicPaymentRecord,
   DayStatusRecord,
+  MonthlyPayment,
   Patient,
   PatientSchedule,
   VacationPeriod,
