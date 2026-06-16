@@ -237,6 +237,7 @@ export function getMonthlyPayments(): MonthlyPayment[] {
 
 export function saveMonthlyPayments(items: MonthlyPayment[]) {
   write(STORAGE_KEYS.monthlyPayments, items);
+  void import("./cloud").then((m) => m.scheduleSync("monthlyPayments"));
 }
 
 export function getMonthlyPaymentSummary(patientId: string, month: string, amountDue = 0) {
