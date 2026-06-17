@@ -57,6 +57,38 @@ function PerfilPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteMessage, setDeleteMessage] = useState("");
 
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<
+    { type: "success" | "error"; text: string } | null
+  >(null);
+
+  const runImport = async () => {
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const cloud = await import("@/lib/store/cloud");
+      const result = await cloud.importLocalToCloud();
+      if (!result.ok) {
+        setImportMessage({
+          type: "error",
+          text: result.error ?? "Não foi possível enviar os dados.",
+        });
+      } else {
+        const c = result.counts ?? {};
+        const total = Object.values(c).reduce((s, n) => s + (n || 0), 0);
+        setImportMessage({
+          type: "success",
+          text:
+            total === 0
+              ? "Nenhum dado local encontrado para enviar."
+              : `Enviados ${total} registros para a sua conta.`,
+        });
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
   useEffect(() => {
     setHasPin(Boolean(loadPin()));
   }, []);
