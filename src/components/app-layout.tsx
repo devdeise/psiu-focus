@@ -183,9 +183,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     const cloud = await import("@/lib/store/cloud");
     cloud.setCloudUser(null);
     // Limpa cache local para o próximo usuário não ver dados anteriores
+    // Mantém apenas o PIN interno do dispositivo.
     try {
-      const keys = ["psiu:clinics", "psiu:patients", "psiu:appointments", "psiu:day-statuses", "psiu:vacations", "psiu:store:seeded"];
-      for (const k of keys) window.localStorage.removeItem(k);
+      const preserve = new Set(["psiu:internal-pin"]);
+      Object.keys(window.localStorage)
+        .filter((k) => k.startsWith("psiu:") && !preserve.has(k))
+        .forEach((k) => window.localStorage.removeItem(k));
     } catch {}
     await signOut();
     navigate({ to: "/auth", replace: true });

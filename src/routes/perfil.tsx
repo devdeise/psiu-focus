@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppLayout } from "@/components/app-layout";
 import { useEffect, useState } from "react";
-import { Bell, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
+import { Bell, CloudUpload, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
@@ -56,6 +56,38 @@ function PerfilPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteMessage, setDeleteMessage] = useState("");
+
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<
+    { type: "success" | "error"; text: string } | null
+  >(null);
+
+  const runImport = async () => {
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const cloud = await import("@/lib/store/cloud");
+      const result = await cloud.importLocalToCloud();
+      if (!result.ok) {
+        setImportMessage({
+          type: "error",
+          text: result.error ?? "Não foi possível enviar os dados.",
+        });
+      } else {
+        const c = result.counts ?? {};
+        const total = Object.values(c).reduce((s, n) => s + (n || 0), 0);
+        setImportMessage({
+          type: "success",
+          text:
+            total === 0
+              ? "Nenhum dado local encontrado para enviar."
+              : `Enviados ${total} registros para a sua conta.`,
+        });
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
 
   useEffect(() => {
     setHasPin(Boolean(loadPin()));
@@ -291,6 +323,43 @@ function PerfilPage() {
             {deleteMessage}
           </div>
         )}
+
+        {/* Importar dados antigos do dispositivo */}
+        <div className="glass-card p-6">
+          <div className="flex items-start gap-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
+              <CloudUpload className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Importar dados deste dispositivo</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Envia para a sua conta na nuvem todos os dados que ainda existem apenas
+                neste navegador (clínicas, pacientes, agenda, pagamentos e caixa).
+                Registros já existentes são atualizados sem duplicar.
+              </p>
+              {importMessage && (
+                <div
+                  className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+                    importMessage.type === "success"
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {importMessage.text}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={runImport}
+                disabled={importing}
+                className="mt-5 inline-flex items-center gap-2 rounded-lg gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground glow transition hover:opacity-90 disabled:opacity-60"
+              >
+                <CloudUpload className="h-4 w-4" />
+                {importing ? "Enviando…" : "Importar para a nuvem"}
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Zona de risco — apenas dados locais por enquanto */}
         <div className="glass-card p-6">
