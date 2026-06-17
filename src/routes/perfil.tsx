@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppLayout } from "@/components/app-layout";
 import { useEffect, useState } from "react";
-import { Bell, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
+import { Bell, CloudUpload, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
