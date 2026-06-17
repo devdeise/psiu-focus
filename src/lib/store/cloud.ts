@@ -387,6 +387,35 @@ async function pushAllLocalToCloud() {
   }
 }
 
+// Importação manual: envia todo o snapshot local para o Cloud do usuário logado.
+// Útil para migrar dados antigos do dispositivo após o login.
+export async function importLocalToCloud(): Promise<{
+  ok: boolean;
+  counts?: Record<string, number>;
+  error?: string;
+}> {
+  if (!currentUserId) return { ok: false, error: "Usuário não autenticado." };
+  // Garante que os syncs internos não sejam bloqueados pelo guard initialPulled.
+  initialPulled = true;
+  try {
+    const raw = (k: string) => window.localStorage.getItem(k);
+    const counts = {
+      clinics: JSON.parse(raw(STORAGE_KEYS.clinics) || "[]").length,
+      patients: JSON.parse(raw(STORAGE_KEYS.patients) || "[]").length,
+      appointments: JSON.parse(raw(STORAGE_KEYS.appointments) || "[]").length,
+      dayStatuses: JSON.parse(raw(STORAGE_KEYS.dayStatuses) || "[]").length,
+      vacations: JSON.parse(raw(STORAGE_KEYS.vacations) || "[]").length,
+      clinicPayments: JSON.parse(raw(STORAGE_KEYS.clinicPayments) || "[]").length,
+      monthlyPayments: JSON.parse(raw(STORAGE_KEYS.monthlyPayments) || "[]").length,
+      cashEntries: JSON.parse(raw(STORAGE_KEYS.cashEntries) || "[]").length,
+    };
+    await pushAllLocalToCloud();
+    return { ok: true, counts };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+}
+
 // Diff-based upsert/delete por coleção
 export async function syncClinics(clinics: Clinic[]) {
   if (!currentUserId || !initialPulled) return;
