@@ -324,6 +324,43 @@ function PerfilPage() {
           </div>
         )}
 
+        {/* Importar dados antigos do dispositivo */}
+        <div className="glass-card p-6">
+          <div className="flex items-start gap-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
+              <CloudUpload className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Importar dados deste dispositivo</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Envia para a sua conta na nuvem todos os dados que ainda existem apenas
+                neste navegador (clínicas, pacientes, agenda, pagamentos e caixa).
+                Registros já existentes são atualizados sem duplicar.
+              </p>
+              {importMessage && (
+                <div
+                  className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+                    importMessage.type === "success"
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {importMessage.text}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={runImport}
+                disabled={importing}
+                className="mt-5 inline-flex items-center gap-2 rounded-lg gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground glow transition hover:opacity-90 disabled:opacity-60"
+              >
+                <CloudUpload className="h-4 w-4" />
+                {importing ? "Enviando…" : "Importar para a nuvem"}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Zona de risco — apenas dados locais por enquanto */}
         <div className="glass-card p-6">
           <h2 className="text-lg font-bold">Limpar dados locais</h2>
