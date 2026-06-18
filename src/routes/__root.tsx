@@ -122,8 +122,10 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   useEffect(() => {
-    // Carrega mock data local na primeira visita (idempotente).
-    import("../lib/store/seed").then((m) => m.ensureSeed());
+    // Seed apenas em ambiente de desenvolvimento — nunca em produção.
+    if (import.meta.env.DEV) {
+      import("../lib/store/seed").then((m) => m.ensureSeed());
+    }
   }, []);
 
   return (

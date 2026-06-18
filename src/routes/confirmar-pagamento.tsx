@@ -1055,8 +1055,8 @@ function ConfirmarPagamentoPage() {
           <TabsContent value="pendencias" className="mt-5">
             <Tabs defaultValue="clinicas" className="w-full">
               <TabsList>
-                <TabsTrigger value="clinicas">Clínicas</TabsTrigger>
-                <TabsTrigger value="particulares">Particulares</TabsTrigger>
+                <TabsTrigger value="clinicas" className="min-w-32 rounded-lg px-5 py-2.5 font-bold text-foreground/80 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-[0_0_18px_rgba(34,211,238,0.32)]">Clínicas</TabsTrigger>
+                <TabsTrigger value="particulares" className="min-w-32 rounded-lg px-5 py-2.5 font-bold text-foreground/80 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-[0_0_18px_rgba(34,211,238,0.32)]">Particulares</TabsTrigger>
               </TabsList>
 
               <TabsContent value="clinicas" className="mt-5">

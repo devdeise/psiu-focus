@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppLayout } from "@/components/app-layout";
 import { useEffect, useState } from "react";
-import { Bell, CloudUpload, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
+import { Bell, LockKeyhole, LogOut, Trash2, UserCircle, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
@@ -62,68 +62,6 @@ function PerfilPage() {
   const [accountDeleteMessage, setAccountDeleteMessage] = useState<
     { type: "success" | "error"; text: string } | null
   >(null);
-
-  const [importing, setImporting] = useState(false);
-  const [importMessage, setImportMessage] = useState<
-    { type: "success" | "error"; text: string } | null
-  >(null);
-  const [clearingDemo, setClearingDemo] = useState(false);
-  const [demoMessage, setDemoMessage] = useState<
-    { type: "success" | "error"; text: string } | null
-  >(null);
-
-  const runImport = async () => {
-    setImporting(true);
-    setImportMessage(null);
-    try {
-      const cloud = await import("@/lib/store/cloud");
-      const result = await cloud.importLocalToCloud();
-      if (!result.ok) {
-        setImportMessage({
-          type: "error",
-          text: result.error ?? "Não foi possível enviar os dados.",
-        });
-      } else {
-        const c = result.counts ?? {};
-        const total = Object.values(c).reduce((s, n) => s + (n || 0), 0);
-        setImportMessage({
-          type: "success",
-          text:
-            total === 0
-              ? "Nenhum dado local encontrado para enviar."
-              : `Enviados ${total} registros para a sua conta.`,
-        });
-      }
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const clearDemoData = async () => {
-    setClearingDemo(true);
-    setDemoMessage(null);
-    try {
-      const cloud = await import("@/lib/store/cloud");
-      const result = await cloud.clearDemoDataForCurrentUser();
-      if (!result.ok) {
-        setDemoMessage({
-          type: "error",
-          text: result.error ?? "Não foi possível limpar os dados de teste.",
-        });
-        return;
-      }
-      const total = Object.values(result.counts ?? {}).reduce((sum, count) => sum + count, 0);
-      setDemoMessage({
-        type: "success",
-        text:
-          total === 0
-            ? "Nenhum dado de teste encontrado para este usuário."
-            : `Dados de teste removidos deste usuário: ${total} registro(s).`,
-      });
-    } finally {
-      setClearingDemo(false);
-    }
-  };
 
   useEffect(() => {
     setHasPin(Boolean(loadPin()));
@@ -260,7 +198,6 @@ function PerfilPage() {
           </button>
         </header>
 
-        {/* Dados do perfil */}
         <form onSubmit={save} className="glass-card p-6">
           <h2 className="text-lg font-bold">Dados básicos</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -317,7 +254,6 @@ function PerfilPage() {
           </div>
         </form>
 
-        {/* PIN interno */}
         <form onSubmit={savePin} className="glass-card p-6">
           <div className="flex items-start gap-4">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
@@ -363,7 +299,6 @@ function PerfilPage() {
           </div>
         </form>
 
-        {/* Notificações placeholder */}
         <div className="glass-card p-6">
           <div className="flex items-start gap-4">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
@@ -387,79 +322,6 @@ function PerfilPage() {
             {deleteMessage}
           </div>
         )}
-
-        {/* Importar dados antigos do dispositivo */}
-        <div className="glass-card p-6">
-          <div className="flex items-start gap-4">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
-              <CloudUpload className="h-5 w-5 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold">Importar dados deste dispositivo</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Envia para a sua conta na nuvem todos os dados que ainda existem apenas
-                neste navegador (clínicas, pacientes, agenda, pagamentos e caixa).
-                Registros já existentes são atualizados sem duplicar.
-              </p>
-              {importMessage && (
-                <div
-                  className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
-                    importMessage.type === "success"
-                      ? "border-success/30 bg-success/10 text-success"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}
-                >
-                  {importMessage.text}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={runImport}
-                disabled={importing}
-                className="mt-5 inline-flex items-center gap-2 rounded-lg gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground glow transition hover:opacity-90 disabled:opacity-60"
-              >
-                <CloudUpload className="h-4 w-4" />
-                {importing ? "Enviando…" : "Importar para a nuvem"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Zona de risco — apenas dados locais por enquanto */}
-        <div className="glass-card p-6">
-          <div className="flex items-start gap-4">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
-              <Trash2 className="h-5 w-5 text-destructive" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold">Limpar dados de teste</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Remove apenas os registros de demonstração conhecidos da conta logada,
-                como pacientes, clínicas e atendimentos de exemplo.
-              </p>
-              {demoMessage && (
-                <div
-                  className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
-                    demoMessage.type === "success"
-                      ? "border-success/30 bg-success/10 text-success"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}
-                >
-                  {demoMessage.text}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={clearDemoData}
-                disabled={clearingDemo}
-                className="mt-5 inline-flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-5 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:opacity-60"
-              >
-                <Trash2 className="h-4 w-4" />
-                {clearingDemo ? "Limpando…" : "Limpar dados de teste"}
-              </button>
-            </div>
-          </div>
-        </div>
 
         <div className="glass-card p-6">
           <h2 className="text-lg font-bold">Limpar dados locais</h2>
