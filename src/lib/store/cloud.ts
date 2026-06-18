@@ -141,6 +141,7 @@ function patientFromRow(row: any, schedules: PatientSchedule[]): Patient {
     paymentType: row.payment_type as Patient["paymentType"],
     paymentFrequency: row.payment_frequency as Patient["paymentFrequency"],
     sessionValue: Number(row.session_value ?? 0),
+    agendaStartDate: data.agendaStartDate ?? undefined,
     notes: row.notes ?? undefined,
     createdAt: row.created_at ?? ts(),
     closedAt: row.closed_at ?? undefined,
@@ -163,7 +164,7 @@ function patientToRow(p: Patient, userId: string) {
     session_value: p.sessionValue ?? 0,
     notes: p.notes ?? null,
     closed_at: p.closedAt ?? null,
-    data: { weekDay: p.weekDay, time: p.time },
+    data: { weekDay: p.weekDay, time: p.time, agendaStartDate: p.agendaStartDate },
   };
 }
 

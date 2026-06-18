@@ -68,6 +68,7 @@ export type Patient = {
   paymentFrequency: PaymentFrequency;
   /** Valor da sessão (ou pacote, conforme frequência). */
   sessionValue: number;
+  agendaStartDate?: string;
   notes?: string;
   createdAt: string;
   closedAt?: string;

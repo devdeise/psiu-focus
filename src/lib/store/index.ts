@@ -159,6 +159,11 @@ export function getActivePatients(): Patient[] {
   return getPatients().filter((p) => p.status === "ativo");
 }
 
+export function patientAgendaStartDate(patient: Patient): string {
+  if (patient.agendaStartDate) return patient.agendaStartDate;
+  return dateKeyFromIso(patient.createdAt);
+}
+
 export function patientHasHistory(patientId: string): boolean {
   if (!patientId) return false;
 
@@ -423,6 +428,8 @@ export function getAgendaAppointmentsForDate(dateKey: string): Appointment[] {
   const items: Appointment[] = [];
 
   for (const patient of getActivePatients()) {
+    if (dateKey < patientAgendaStartDate(patient)) continue;
+
     for (const schedule of normalizePatientSchedules(patient)) {
       if (schedule.weekday !== weekday) continue;
 

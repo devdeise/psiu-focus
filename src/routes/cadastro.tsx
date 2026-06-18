@@ -29,6 +29,7 @@ import {
   saveAppointments,
   saveClinics,
   savePatients,
+  toDateKey,
 } from "@/lib/store";
 import type {
   Clinic,
@@ -74,6 +75,7 @@ type PatientDraft = {
   clinicId: string;
   attendanceTypeId: string;
   value: string;
+  agendaStartDate: string;
   schedules: PatientScheduleDraft[];
   billingModel: PaymentFrequency;
   notes: string;
@@ -176,10 +178,20 @@ function emptyPatientDraft(): PatientDraft {
     clinicId: "",
     attendanceTypeId: "",
     value: "",
+    agendaStartDate: "",
     schedules: [emptyScheduleDraft()],
     billingModel: "sessao",
     notes: "",
   };
+}
+
+function dateKeyFromIso(iso?: string) {
+  if (!iso) return "";
+  return toDateKey(new Date(iso));
+}
+
+function patientAgendaStartDraftValue(patient: Patient) {
+  return patient.agendaStartDate || dateKeyFromIso(patient.createdAt);
 }
 
 function normalizeBillingModel(value?: string): PaymentFrequency {
@@ -532,6 +544,7 @@ function CadastroPage() {
       clinicId: patient.clinicId ?? "",
       attendanceTypeId: patient.attendanceTypeId ?? "",
       value: typeValueText(patient.sessionValue),
+      agendaStartDate: patientAgendaStartDraftValue(patient),
       schedules: schedules.length
         ? schedules.map((schedule) => ({
             ...schedule,
@@ -622,6 +635,8 @@ function CadastroPage() {
       paymentType: patientDraft.origin,
       paymentFrequency: patientDraft.origin === "particular" ? patientDraft.billingModel : "sessao",
       sessionValue: value,
+      agendaStartDate:
+        patientDraft.agendaStartDate || dateKeyFromIso(existing?.createdAt) || toDateKey(new Date()),
       notes: patientDraft.notes.trim() || undefined,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       closedAt: reactivate ? undefined : existing?.closedAt,
@@ -1066,6 +1081,19 @@ function CadastroPage() {
                     </Field>
                   </div>
 
+                  <Field label="Data de início da agenda">
+                    <Input
+                      type="date"
+                      value={patientDraft.agendaStartDate}
+                      onChange={(event) =>
+                        setPatientDraft((draft) => ({
+                          ...draft,
+                          agendaStartDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+
                   <div className="grid gap-3 rounded-lg border border-border bg-card/40 p-3">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1298,6 +1326,19 @@ function CadastroPage() {
                         }
                         placeholder="Valor"
                         inputMode="decimal"
+                      />
+                    </Field>
+
+                    <Field label="Data de início da agenda">
+                      <Input
+                        type="date"
+                        value={patientDraft.agendaStartDate}
+                        onChange={(event) =>
+                          setPatientDraft((draft) => ({
+                            ...draft,
+                            agendaStartDate: event.target.value,
+                          }))
+                        }
                       />
                     </Field>
 
