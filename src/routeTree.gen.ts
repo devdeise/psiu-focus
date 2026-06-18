@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as FinancasRouteImport } from './routes/financas'
+import { Route as ExportacoesRouteImport } from './routes/exportacoes'
 import { Route as ConfirmarPagamentoRouteImport } from './routes/confirmar-pagamento'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -27,6 +28,11 @@ const PerfilRoute = PerfilRouteImport.update({
 const FinancasRoute = FinancasRouteImport.update({
   id: '/financas',
   path: '/financas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExportacoesRoute = ExportacoesRouteImport.update({
+  id: '/exportacoes',
+  path: '/exportacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfirmarPagamentoRoute = ConfirmarPagamentoRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/cadastro': typeof CadastroRoute
   '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
+  '/exportacoes': typeof ExportacoesRoute
   '/financas': typeof FinancasRoute
   '/perfil': typeof PerfilRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cadastro': typeof CadastroRoute
   '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
+  '/exportacoes': typeof ExportacoesRoute
   '/financas': typeof FinancasRoute
   '/perfil': typeof PerfilRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/cadastro': typeof CadastroRoute
   '/confirmar-pagamento': typeof ConfirmarPagamentoRoute
+  '/exportacoes': typeof ExportacoesRoute
   '/financas': typeof FinancasRoute
   '/perfil': typeof PerfilRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cadastro'
     | '/confirmar-pagamento'
+    | '/exportacoes'
     | '/financas'
     | '/perfil'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cadastro'
     | '/confirmar-pagamento'
+    | '/exportacoes'
     | '/financas'
     | '/perfil'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cadastro'
     | '/confirmar-pagamento'
+    | '/exportacoes'
     | '/financas'
     | '/perfil'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CadastroRoute: typeof CadastroRoute
   ConfirmarPagamentoRoute: typeof ConfirmarPagamentoRoute
+  ExportacoesRoute: typeof ExportacoesRoute
   FinancasRoute: typeof FinancasRoute
   PerfilRoute: typeof PerfilRoute
 }
@@ -161,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/financas'
       fullPath: '/financas'
       preLoaderRoute: typeof FinancasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/exportacoes': {
+      id: '/exportacoes'
+      path: '/exportacoes'
+      fullPath: '/exportacoes'
+      preLoaderRoute: typeof ExportacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/confirmar-pagamento': {
@@ -223,9 +243,20 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CadastroRoute: CadastroRoute,
   ConfirmarPagamentoRoute: ConfirmarPagamentoRoute,
+  ExportacoesRoute: ExportacoesRoute,
   FinancasRoute: FinancasRoute,
   PerfilRoute: PerfilRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

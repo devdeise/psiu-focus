@@ -8,6 +8,7 @@ import {
   UserPlus,
   UserCircle,
   NotebookPen,
+  FileDown,
   LogOut,
   Menu,
   X,
@@ -34,6 +35,7 @@ const navItems = [
   { to: "/financas", label: "Finanças", icon: Wallet },
   { to: "/confirmar-pagamento", label: "Confirmar Pagamento", icon: CheckCircle2 },
   { to: "/analise-faltas", label: "Análise de Faltas", icon: AlertTriangle },
+  { to: "/exportacoes", label: "Exportações", icon: FileDown },
   { to: "/cadastro", label: "Cadastro", icon: UserPlus },
   { to: "/perfil", label: "Perfil", icon: UserCircle },
 ] as const;
