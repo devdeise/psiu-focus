@@ -21,57 +21,34 @@ export type Note = {
   updatedAt?: string;
 };
 
-function read(): Note[] {
-  if (typeof window === "undefined") return [];
+function notesKey(userId: string) {
+  return `${NOTES_LIST_KEY}:${userId}`;
+}
+
+function read(userId: string): Note[] {
+  if (typeof window === "undefined" || !userId) return [];
   try {
-    const raw = window.localStorage.getItem(NOTES_LIST_KEY);
+    const raw = window.localStorage.getItem(notesKey(userId));
     return raw ? (JSON.parse(raw) as Note[]) : [];
   } catch {
     return [];
   }
 }
 
-function write(notes: Note[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(NOTES_LIST_KEY, JSON.stringify(notes));
+function write(userId: string, notes: Note[]) {
+  if (typeof window === "undefined" || !userId) return;
+  window.localStorage.setItem(notesKey(userId), JSON.stringify(notes));
 }
 
-export function loadNotes(): Note[] {
-  if (typeof window === "undefined") return [];
-  // Seed once
-  try {
-    const seeded = window.localStorage.getItem(NOTES_SEEDED_KEY);
-    if (!seeded && !window.localStorage.getItem(NOTES_LIST_KEY)) {
-      const now = new Date().toISOString();
-      const seed: Note[] = [
-        {
-          id: crypto.randomUUID(),
-          title: "Confirmar pagamento",
-          content:
-            "Verificar se o paciente Bruno realizou o pagamento da sessão.",
-          category: "Pagamento",
-          createdAt: now,
-        },
-        {
-          id: crypto.randomUUID(),
-          title: "Observação de agenda",
-          content:
-            "Conferir horários da semana antes de iniciar os atendimentos.",
-          category: "Agenda",
-          createdAt: now,
-        },
-      ];
-      write(seed);
-      window.localStorage.setItem(NOTES_SEEDED_KEY, "1");
-    }
-  } catch {}
-  return read();
+export function loadNotes(userId: string): Note[] {
+  return read(userId);
 }
 
 export function saveNote(
+  userId: string,
   input: Omit<Note, "id" | "createdAt" | "updatedAt"> & { id?: string },
 ): Note[] {
-  const notes = read();
+  const notes = read(userId);
   const now = new Date().toISOString();
   if (input.id) {
     const idx = notes.findIndex((n) => n.id === input.id);
@@ -93,22 +70,38 @@ export function saveNote(
       createdAt: now,
     });
   }
-  write(notes);
+  write(userId, notes);
   return notes;
 }
 
-export function deleteNote(id: string): Note[] {
-  const notes = read().filter((n) => n.id !== id);
-  write(notes);
+export function deleteNote(userId: string, id: string): Note[] {
+  const notes = read(userId).filter((n) => n.id !== id);
+  write(userId, notes);
   return notes;
 }
 
-export function addQuickNote(content: string): Note[] {
+export function addQuickNote(userId: string, content: string): Note[] {
   const trimmed = content.trim();
-  if (!trimmed) return read();
-  return saveNote({
+  if (!trimmed) return read(userId);
+  return saveNote(userId, {
     title: "Anotação rápida",
     content: trimmed,
     category: "Lembrete",
   });
+}
+
+export function clearNotesCache(userId?: string) {
+  if (typeof window === "undefined") return;
+  if (userId) {
+    window.localStorage.removeItem(notesKey(userId));
+    return;
+  }
+  Object.keys(window.localStorage)
+    .filter(
+      (key) =>
+        key === NOTES_LIST_KEY ||
+        key === NOTES_SEEDED_KEY ||
+        key.startsWith(`${NOTES_LIST_KEY}:`),
+    )
+    .forEach((key) => window.localStorage.removeItem(key));
 }

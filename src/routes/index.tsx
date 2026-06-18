@@ -12,6 +12,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { addQuickNote } from "@/lib/notes-store";
+import { useAuth } from "@/lib/auth";
 import {
   addMinutesToTime,
   countAbsences,
@@ -114,20 +115,24 @@ type AppointmentSummary = {
   date: string;
 };
 
-function loadNotes(): string {
+function quickNotesKey(userId: string) {
+  return userId ? `${NOTES_KEY}:${userId}` : NOTES_KEY;
+}
+
+function loadNotes(userId: string): string {
   if (typeof window === "undefined") return "";
   try {
-    const raw = window.localStorage.getItem(NOTES_KEY);
+    const raw = window.localStorage.getItem(quickNotesKey(userId));
     return raw ?? "";
   } catch {
     return "";
   }
 }
 
-function saveNotes(value: string) {
+function saveNotes(userId: string, value: string) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(NOTES_KEY, value);
+    window.localStorage.setItem(quickNotesKey(userId), value);
   } catch {}
 }
 
@@ -241,6 +246,8 @@ function AppointmentBlock({
 }
 
 function HomePage() {
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   const [greeting, setGreeting] = useState("Bom dia");
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
@@ -253,7 +260,7 @@ function HomePage() {
   useEffect(() => {
     const hour = new Date().getHours();
     setGreeting(hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite");
-    setNotes(loadNotes());
+    setNotes(loadNotes(userId));
 
     setActivePatients(getActivePatients().length);
     setTodayCount(getAppointmentsToday().length);
@@ -268,13 +275,13 @@ function HomePage() {
       currentAppointment ? appointmentSummary(currentAppointment, patients, clinics) : null,
     );
     setNext(upcoming ? appointmentSummary(upcoming, patients, clinics) : null);
-  }, []);
+  }, [userId]);
 
   const handleSaveNotes = () => {
     const text = notes.trim();
     if (!text) return;
-    saveNotes("");
-    addQuickNote(text);
+    saveNotes(userId, "");
+    addQuickNote(userId, text);
     setNotes("");
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -282,7 +289,7 @@ function HomePage() {
 
   const handleClearNotes = () => {
     setNotes("");
-    saveNotes("");
+    saveNotes(userId, "");
   };
 
   return (

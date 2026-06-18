@@ -17,6 +17,7 @@ import {
   saveNote,
   deleteNote,
 } from "@/lib/notes-store";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/anotacoes")({
   head: () => ({
@@ -62,14 +63,16 @@ const EMPTY_EDITOR: EditorState = {
 };
 
 function AnotacoesPage() {
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   const [notes, setNotes] = useState<Note[]>([]);
   const [query, setQuery] = useState("");
   const [editor, setEditor] = useState<EditorState>(EMPTY_EDITOR);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
-    setNotes(loadNotes());
-  }, []);
+    setNotes(loadNotes(userId));
+  }, [userId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -96,7 +99,7 @@ function AnotacoesPage() {
 
   const handleSave = () => {
     if (!editor.title.trim() || !editor.content.trim()) return;
-    const updated = saveNote({
+    const updated = saveNote(userId, {
       id: editor.id,
       title: editor.title.trim(),
       content: editor.content.trim(),
@@ -107,7 +110,7 @@ function AnotacoesPage() {
   };
 
   const handleDelete = (id: string) => {
-    setNotes(deleteNote(id));
+    setNotes(deleteNote(userId, id));
     setConfirmId(null);
   };
 

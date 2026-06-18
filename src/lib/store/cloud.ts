@@ -21,11 +21,65 @@ let currentUserId: string | null = null;
 let pullPromise: Promise<void> | null = null;
 let initialPulled = false;
 
+const DEMO_PATIENT_NAMES = ["Ana Lima", "Bruno Souza", "Carla Mendes", "Diego Faria", "Elisa Prado"];
+const DEMO_CLINIC_NAMES = [
+  "Clínica Bem-Estar",
+  "ClÃ­nica Bem-Estar",
+  "Espaço Equilíbrio",
+  "EspaÃ§o EquilÃ­brio",
+];
+
+function parseLocal<T>(key: string): T[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(key) || "[]") as T[];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal<T>(key: string, value: T[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function writeEmptyOperationalCache() {
+  if (typeof window === "undefined") return;
+  writeLocal(STORAGE_KEYS.clinics, []);
+  writeLocal(STORAGE_KEYS.patients, []);
+  writeLocal(STORAGE_KEYS.appointments, []);
+  writeLocal(STORAGE_KEYS.dayStatuses, []);
+  writeLocal(STORAGE_KEYS.vacations, []);
+  writeLocal(STORAGE_KEYS.clinicPayments, []);
+  writeLocal(STORAGE_KEYS.monthlyPayments, []);
+  writeLocal(STORAGE_KEYS.cashEntries, []);
+  window.localStorage.setItem(STORAGE_KEYS.seeded, "1");
+}
+
+export function clearLocalUserCache(options: { preservePin?: boolean; clearNotes?: boolean } = {}) {
+  if (typeof window === "undefined") return;
+  const preservePin = options.preservePin ?? true;
+  const preserve = new Set(preservePin ? ["psiu:internal-pin"] : []);
+
+  Object.keys(window.localStorage)
+    .filter((key) => {
+      if (!key.startsWith("psiu:")) return false;
+      if (preserve.has(key)) return false;
+      if (!options.clearNotes && key.startsWith("psiu:notes:")) return false;
+      if (!options.clearNotes && key.startsWith("psiu:quick-notes:")) return false;
+      return true;
+    })
+    .forEach((key) => window.localStorage.removeItem(key));
+}
+
 export function setCloudUser(userId: string | null) {
   if (currentUserId === userId) return;
   currentUserId = userId;
   initialPulled = false;
   pullPromise = null;
+  if (userId) {
+    clearLocalUserCache({ preservePin: true, clearNotes: false });
+  }
 }
 
 export function getCloudUser() {
@@ -337,8 +391,8 @@ export function pullAllFromCloud(): Promise<void> {
         !cashEntries.length;
 
       if (isEmpty) {
+        writeEmptyOperationalCache();
         initialPulled = true;
-        await pushAllLocalToCloud();
         return;
       }
 
@@ -359,7 +413,179 @@ export function pullAllFromCloud(): Promise<void> {
   return pullPromise;
 }
 
+function pruneDemoLocalData() {
+  const clinics = parseLocal<Clinic>(STORAGE_KEYS.clinics);
+  const patients = parseLocal<Patient>(STORAGE_KEYS.patients);
+  const clinicIds = new Set(
+    clinics.filter((clinic) => DEMO_CLINIC_NAMES.includes(clinic.name)).map((clinic) => clinic.id),
+  );
+  const patientIds = new Set(
+    patients.filter((patient) => DEMO_PATIENT_NAMES.includes(patient.name)).map((patient) => patient.id),
+  );
+  const appointments = parseLocal<Appointment>(STORAGE_KEYS.appointments);
+  const appointmentIds = new Set(
+    appointments
+      .filter(
+        (appointment) =>
+          patientIds.has(appointment.patientId) ||
+          Boolean(appointment.clinicId && clinicIds.has(appointment.clinicId)),
+      )
+      .map((appointment) => appointment.id),
+  );
+
+  writeLocal(
+    STORAGE_KEYS.clinics,
+    clinics.filter((clinic) => !clinicIds.has(clinic.id)),
+  );
+  writeLocal(
+    STORAGE_KEYS.patients,
+    patients.filter((patient) => !patientIds.has(patient.id)),
+  );
+  writeLocal(
+    STORAGE_KEYS.appointments,
+    appointments.filter((appointment) => !appointmentIds.has(appointment.id)),
+  );
+  writeLocal(
+    STORAGE_KEYS.monthlyPayments,
+    parseLocal<MonthlyPayment>(STORAGE_KEYS.monthlyPayments).filter(
+      (payment) => !patientIds.has(payment.patientId),
+    ),
+  );
+  writeLocal(
+    STORAGE_KEYS.cashEntries,
+    parseLocal<CashEntry>(STORAGE_KEYS.cashEntries).filter(
+      (entry) =>
+        !Boolean(entry.patientId && patientIds.has(entry.patientId)) &&
+        !Boolean(entry.clinicId && clinicIds.has(entry.clinicId)) &&
+        !Boolean(entry.appointmentId && appointmentIds.has(entry.appointmentId)),
+    ),
+  );
+  writeLocal(
+    STORAGE_KEYS.clinicPayments,
+    parseLocal<ClinicPaymentRecord>(STORAGE_KEYS.clinicPayments).filter(
+      (record) =>
+        !clinicIds.has(record.clinicId) &&
+        !record.appointmentIds.some((appointmentId) => appointmentIds.has(appointmentId)),
+    ),
+  );
+
+  return {
+    clinics: clinicIds.size,
+    patients: patientIds.size,
+    appointments: appointmentIds.size,
+  };
+}
+
+export async function clearDemoDataForCurrentUser(): Promise<{
+  ok: boolean;
+  counts?: Record<string, number>;
+  error?: string;
+}> {
+  if (!currentUserId) return { ok: false, error: "Usuário não autenticado." };
+  const userId = currentUserId;
+  const localCounts = pruneDemoLocalData();
+
+  try {
+    const [{ data: cloudClinics }, { data: cloudPatients }] = await Promise.all([
+      supabase.from("clinics").select("id").eq("user_id", userId).in("name", DEMO_CLINIC_NAMES),
+      supabase.from("patients").select("id").eq("user_id", userId).in("name", DEMO_PATIENT_NAMES),
+    ]);
+
+    const clinicIds = (cloudClinics ?? []).map((row: any) => row.id);
+    const patientIds = (cloudPatients ?? []).map((row: any) => row.id);
+    const { data: cloudAppointments } = await supabase
+      .from("appointments")
+      .select("id, patient_id, clinic_id")
+      .eq("user_id", userId);
+    const appointmentIds = (cloudAppointments ?? [])
+      .filter(
+        (row: any) =>
+          patientIds.includes(row.patient_id) ||
+          Boolean(row.clinic_id && clinicIds.includes(row.clinic_id)),
+      )
+      .map((row: any) => row.id);
+
+    if (patientIds.length) {
+      await supabase.from("monthly_payments").delete().eq("user_id", userId).in("patient_id", patientIds);
+      await supabase.from("patient_schedules").delete().eq("user_id", userId).in("patient_id", patientIds);
+    }
+    if (appointmentIds.length) {
+      await supabase.from("cash_entries").delete().eq("user_id", userId).in("appointment_id", appointmentIds);
+    }
+    if (clinicIds.length) {
+      await supabase.from("cash_entries").delete().eq("user_id", userId).in("clinic_id", clinicIds);
+      await supabase.from("clinic_payments").delete().eq("user_id", userId).in("clinic_id", clinicIds);
+      await supabase.from("attendance_types").delete().eq("user_id", userId).in("clinic_id", clinicIds);
+    }
+    if (appointmentIds.length) {
+      await supabase.from("appointments").delete().eq("user_id", userId).in("id", appointmentIds);
+    }
+    if (patientIds.length) {
+      await supabase.from("patients").delete().eq("user_id", userId).in("id", patientIds);
+    }
+    if (clinicIds.length) {
+      await supabase.from("clinics").delete().eq("user_id", userId).in("id", clinicIds);
+    }
+
+    pullPromise = null;
+    initialPulled = false;
+    await pullAllFromCloud();
+
+    return {
+      ok: true,
+      counts: {
+        clinics: Math.max(localCounts.clinics, clinicIds.length),
+        patients: Math.max(localCounts.patients, patientIds.length),
+        appointments: Math.max(localCounts.appointments, appointmentIds.length),
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+}
+
 // --- push helpers (local → cloud) ---
+export async function deleteCurrentUserAccountData(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  if (!currentUserId) return { ok: false, error: "Usuário não autenticado." };
+  const userId = currentUserId;
+  const client = supabase as any;
+
+  const deleteUserRows = async (table: string) => {
+    const { error } = await client.from(table).delete().eq("user_id", userId);
+    if (error) throw new Error(`Falha ao apagar ${table}: ${error.message}`);
+  };
+
+  try {
+    for (const table of [
+      "cash_entries",
+      "clinic_payments",
+      "monthly_payments",
+      "appointments",
+      "day_statuses",
+      "vacations",
+      "patient_schedules",
+      "attendance_types",
+      "patients",
+      "clinics",
+      "profiles",
+    ]) {
+      await deleteUserRows(table);
+    }
+
+    clearLocalUserCache({ preservePin: false, clearNotes: true });
+    currentUserId = null;
+    pullPromise = null;
+    initialPulled = false;
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+}
+
 async function pushAllLocalToCloud() {
   if (!currentUserId) return;
   try {

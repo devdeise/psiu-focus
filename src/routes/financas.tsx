@@ -32,7 +32,7 @@ export const Route = createFileRoute("/financas")({
   component: FinancasPage,
 });
 
-type PeriodMode = "current" | "previous" | "custom";
+type PeriodMode = "current" | "previous" | "next" | "custom";
 type CardId =
   | "atingido"
   | "previsao"
@@ -109,6 +109,13 @@ function previousMonthPeriod(): Period {
   return { start: toDateKey(start), end: toDateKey(end) };
 }
 
+function nextMonthPeriod(): Period {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+  return { start: toDateKey(start), end: toDateKey(end) };
+}
+
 function inPeriod(dateKey: string, period: Period) {
   return dateKey >= period.start && dateKey <= period.end;
 }
@@ -177,6 +184,7 @@ function FinancasPage() {
 
   const period = useMemo<Period>(() => {
     if (periodMode === "previous") return previousMonthPeriod();
+    if (periodMode === "next") return nextMonthPeriod();
     if (periodMode === "custom") {
       return customStart <= customEnd
         ? { start: customStart, end: customEnd }
@@ -461,6 +469,13 @@ function FinancasPage() {
                   onClick={() => setPeriodMode("previous")}
                 >
                   Mês anterior
+                </Button>
+                <Button
+                  size="sm"
+                  variant={periodMode === "next" ? "default" : "outline"}
+                  onClick={() => setPeriodMode("next")}
+                >
+                  Mês seguinte
                 </Button>
                 <Button
                   size="sm"

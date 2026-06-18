@@ -56,9 +56,19 @@ function PerfilPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteMessage, setDeleteMessage] = useState("");
+  const [accountDeleteModalOpen, setAccountDeleteModalOpen] = useState(false);
+  const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const [accountDeleteMessage, setAccountDeleteMessage] = useState<
+    { type: "success" | "error"; text: string } | null
+  >(null);
 
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<
+    { type: "success" | "error"; text: string } | null
+  >(null);
+  const [clearingDemo, setClearingDemo] = useState(false);
+  const [demoMessage, setDemoMessage] = useState<
     { type: "success" | "error"; text: string } | null
   >(null);
 
@@ -86,6 +96,32 @@ function PerfilPage() {
       }
     } finally {
       setImporting(false);
+    }
+  };
+
+  const clearDemoData = async () => {
+    setClearingDemo(true);
+    setDemoMessage(null);
+    try {
+      const cloud = await import("@/lib/store/cloud");
+      const result = await cloud.clearDemoDataForCurrentUser();
+      if (!result.ok) {
+        setDemoMessage({
+          type: "error",
+          text: result.error ?? "Não foi possível limpar os dados de teste.",
+        });
+        return;
+      }
+      const total = Object.values(result.counts ?? {}).reduce((sum, count) => sum + count, 0);
+      setDemoMessage({
+        type: "success",
+        text:
+          total === 0
+            ? "Nenhum dado de teste encontrado para este usuário."
+            : `Dados de teste removidos deste usuário: ${total} registro(s).`,
+      });
+    } finally {
+      setClearingDemo(false);
     }
   };
 
@@ -128,8 +164,36 @@ function PerfilPage() {
   };
 
   const handleLogout = async () => {
+    const cloud = await import("@/lib/store/cloud");
+    cloud.clearLocalUserCache({ preservePin: true, clearNotes: true });
+    cloud.setCloudUser(null);
     await signOut();
     navigate({ to: "/auth", replace: true });
+  };
+
+  const handleDeleteAccount = async () => {
+    if (accountDeleteConfirmation !== "DELETAR" || accountDeleting) return;
+    setAccountDeleting(true);
+    setAccountDeleteMessage(null);
+    try {
+      const cloud = await import("@/lib/store/cloud");
+      const result = await cloud.deleteCurrentUserAccountData();
+      if (!result.ok) {
+        setAccountDeleteMessage({
+          type: "error",
+          text: result.error ?? "Não foi possível apagar os dados da conta.",
+        });
+        return;
+      }
+      setAccountDeleteMessage({
+        type: "success",
+        text: "Dados da conta apagados com sucesso.",
+      });
+      await signOut();
+      navigate({ to: "/auth", replace: true });
+    } finally {
+      setAccountDeleting(false);
+    }
   };
 
   const deleteLocalData = () => {
@@ -363,6 +427,41 @@ function PerfilPage() {
 
         {/* Zona de risco — apenas dados locais por enquanto */}
         <div className="glass-card p-6">
+          <div className="flex items-start gap-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-card/60">
+              <Trash2 className="h-5 w-5 text-destructive" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Limpar dados de teste</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Remove apenas os registros de demonstração conhecidos da conta logada,
+                como pacientes, clínicas e atendimentos de exemplo.
+              </p>
+              {demoMessage && (
+                <div
+                  className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+                    demoMessage.type === "success"
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {demoMessage.text}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={clearDemoData}
+                disabled={clearingDemo}
+                className="mt-5 inline-flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-5 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" />
+                {clearingDemo ? "Limpando…" : "Limpar dados de teste"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6">
           <h2 className="text-lg font-bold">Limpar dados locais</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Apaga os dados locais deste navegador (pacientes, clínicas, agenda, pagamentos,
@@ -378,6 +477,38 @@ function PerfilPage() {
           >
             <Trash2 className="h-4 w-4" />
             Limpar dados locais
+          </button>
+        </div>
+
+        <div className="glass-card border-destructive/30 p-6">
+          <h2 className="text-lg font-bold text-destructive">Zona de risco</h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Esta ação apagará todos os dados vinculados à sua conta no PSIU!,
+            incluindo clínicas, pacientes, agenda, pagamentos, histórico, anotações
+            e finanças. Sua sessão será encerrada após a exclusão.
+          </p>
+          {accountDeleteMessage && (
+            <div
+              className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+                accountDeleteMessage.type === "success"
+                  ? "border-success/30 bg-success/10 text-success"
+                  : "border-destructive/30 bg-destructive/10 text-destructive"
+              }`}
+            >
+              {accountDeleteMessage.text}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setAccountDeleteConfirmation("");
+              setAccountDeleteMessage(null);
+              setAccountDeleteModalOpen(true);
+            }}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20"
+          >
+            <Trash2 className="h-4 w-4" />
+            Deletar conta
           </button>
         </div>
 
@@ -430,6 +561,80 @@ function PerfilPage() {
                   className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Apagar dados
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {accountDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-4 backdrop-blur-sm">
+            <div className="glass-card w-full max-w-xl border-destructive/30 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-destructive">Deletar conta?</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Esta ação apagará todos os dados vinculados à sua conta no PSIU!.
+                    Não será possível recuperar essas informações.
+                  </p>
+                  <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    Após confirmar, seus dados serão apagados e sua sessão será encerrada.
+                    Caso faça login novamente, sua conta estará sem informações cadastradas.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (accountDeleting) return;
+                    setAccountDeleteModalOpen(false);
+                    setAccountDeleteConfirmation("");
+                  }}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-card/60 text-muted-foreground transition hover:text-foreground"
+                  aria-label="Fechar modal"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <label className="mt-5 grid gap-2">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Digite DELETAR para confirmar.
+                </span>
+                <input
+                  type="text"
+                  value={accountDeleteConfirmation}
+                  onChange={(event) => setAccountDeleteConfirmation(event.target.value)}
+                  placeholder="DELETAR"
+                  disabled={accountDeleting}
+                  className="w-full rounded-lg border border-input bg-card/60 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                />
+              </label>
+
+              {accountDeleteMessage?.type === "error" && (
+                <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {accountDeleteMessage.text}
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={accountDeleting}
+                  onClick={() => {
+                    setAccountDeleteModalOpen(false);
+                    setAccountDeleteConfirmation("");
+                  }}
+                  className="rounded-lg border border-border bg-card/60 px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-card disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={accountDeleteConfirmation !== "DELETAR" || accountDeleting}
+                  onClick={handleDeleteAccount}
+                  className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-semibold text-destructive transition hover:bg-destructive/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {accountDeleting ? "Deletando…" : "Deletar conta"}
                 </button>
               </div>
             </div>

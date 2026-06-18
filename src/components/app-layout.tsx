@@ -181,15 +181,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     const cloud = await import("@/lib/store/cloud");
+    cloud.clearLocalUserCache({ preservePin: true, clearNotes: true });
     cloud.setCloudUser(null);
     // Limpa cache local para o próximo usuário não ver dados anteriores
     // Mantém apenas o PIN interno do dispositivo.
-    try {
-      const preserve = new Set(["psiu:internal-pin"]);
-      Object.keys(window.localStorage)
-        .filter((k) => k.startsWith("psiu:") && !preserve.has(k))
-        .forEach((k) => window.localStorage.removeItem(k));
-    } catch {}
     await signOut();
     navigate({ to: "/auth", replace: true });
   };
