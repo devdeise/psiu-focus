@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { ActionSuccessModal } from "@/components/action-success-modal";
 import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ export const Route = createFileRoute("/cadastro")({
 });
 
 type PatientOrigin = "clinica" | "particular";
+type PatientOriginFilter = "todos" | "clinica" | "particular";
 
 type ClinicTypeDraft = {
   id: string;
@@ -86,6 +88,12 @@ type DeletePatientDraft = {
   mode: "simple" | "protected" | "blocked";
   pin: string;
   error: string;
+};
+
+type SuccessModal = {
+  title: string;
+  description: string;
+  details: Array<{ label: string; value: string }>;
 };
 
 const PIN_STORAGE_KEY = "psiu:internal-pin";
@@ -286,6 +294,14 @@ function billingLabel(value?: string) {
   return billingOptions.find((item) => item.value === normalizeBillingModel(value))?.label ?? "—";
 }
 
+function formatDateLabel(value?: string) {
+  if (!value) return "—";
+  const dateKey = value.includes("T") ? dateKeyFromIso(value) : value;
+  const [year, month, day] = dateKey.split("-");
+  if (!year || !month || !day) return "—";
+  return `${day}/${month}/${year}`;
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-1.5 text-sm">
@@ -318,11 +334,28 @@ function CadastroPage() {
   const [activeTab, setActiveTab] = useState("clinicas");
   const [reactivateTarget, setReactivateTarget] = useState<Patient | null>(null);
   const [deleteDraft, setDeleteDraft] = useState<DeletePatientDraft | null>(null);
+  const [successModal, setSuccessModal] = useState<SuccessModal | null>(null);
+  const [clinicModalOpen, setClinicModalOpen] = useState(false);
+  const [patientModalOpen, setPatientModalOpen] = useState(false);
+  const [patientSearch, setPatientSearch] = useState("");
+  const [patientOriginFilter, setPatientOriginFilter] = useState<PatientOriginFilter>("todos");
+  const [patientClinicFilter, setPatientClinicFilter] = useState("todas");
 
   const activePatients = useMemo(
     () => patients.filter((patient) => patient.status === "ativo"),
     [patients],
   );
+  const filteredActivePatients = useMemo(() => {
+    const search = patientSearch.trim().toLowerCase();
+
+    return activePatients.filter((patient) => {
+      if (search && !patient.name.toLowerCase().includes(search)) return false;
+      if (patientOriginFilter === "clinica" && patient.paymentType !== "clinica") return false;
+      if (patientOriginFilter === "particular" && patient.paymentType !== "particular") return false;
+      if (patientClinicFilter !== "todas" && patient.clinicId !== patientClinicFilter) return false;
+      return true;
+    });
+  }, [activePatients, patientClinicFilter, patientOriginFilter, patientSearch]);
   const closedPatients = useMemo(
     () => patients.filter((patient) => patient.status === "encerrado"),
     [patients],
@@ -339,8 +372,20 @@ function CadastroPage() {
     return () => window.clearTimeout(timeout);
   }, [successToast]);
 
+  useEffect(() => {
+    if (patientOriginFilter === "particular") {
+      setPatientClinicFilter("todas");
+    }
+  }, [patientOriginFilter]);
+
   const showSuccessToast = (text: string) => {
     setSuccessToast(text);
+  };
+
+  const clearPatientFilters = () => {
+    setPatientSearch("");
+    setPatientOriginFilter("todos");
+    setPatientClinicFilter("todas");
   };
 
   const persistClinics = (next: Clinic[], note: string, toast?: string) => {
@@ -364,7 +409,16 @@ function CadastroPage() {
     }));
   };
 
-  const resetClinicForm = () => setClinicDraft(emptyClinicDraft());
+  const resetClinicForm = () => {
+    setClinicDraft(emptyClinicDraft());
+    setClinicModalOpen(false);
+  };
+
+  const openNewClinic = () => {
+    setClinicDraft(emptyClinicDraft());
+    setClinicModalOpen(true);
+    setMessage("");
+  };
 
   const editClinic = (clinic: Clinic) => {
     setClinicDraft({
@@ -379,6 +433,7 @@ function CadastroPage() {
       customPaymentDays:
         clinic.paymentTermType === "custom" ? String(clinic.customPaymentDays ?? clinic.paymentTermDays ?? "") : "",
     });
+    setClinicModalOpen(true);
     setMessage("");
   };
 
@@ -436,6 +491,16 @@ function CadastroPage() {
       existing ? "Clínica atualizada." : "Clínica cadastrada.",
       existing ? "Alteração salva com sucesso." : "Cadastro salvo com sucesso.",
     );
+    setSuccessModal({
+      title: existing ? "Registro editado com sucesso" : "Registro realizado",
+      description: existing
+        ? "As alterações foram salvas no PSIU!."
+        : "O cadastro foi salvo com sucesso no PSIU!.",
+      details: [
+        { label: "Tipo", value: "Clínica" },
+        { label: "Nome", value: clinic.name },
+      ],
+    });
     resetClinicForm();
   };
 
@@ -472,6 +537,14 @@ function CadastroPage() {
   const resetPatientForm = () => {
     setPatientDraft(emptyPatientDraft());
     setReactivateTarget(null);
+    setPatientModalOpen(false);
+  };
+
+  const openNewPatient = () => {
+    setPatientDraft(emptyPatientDraft());
+    setReactivateTarget(null);
+    setPatientModalOpen(true);
+    setMessage("");
   };
 
   const updatePatientSchedule = (
@@ -559,6 +632,7 @@ function CadastroPage() {
   const editPatient = (patient: Patient) => {
     fillPatientDraft(patient);
     setReactivateTarget(null);
+    setPatientModalOpen(true);
     setMessage("");
   };
 
@@ -659,6 +733,16 @@ function CadastroPage() {
           ? "Alteração salva com sucesso."
           : "Cadastro salvo com sucesso.",
     );
+    setSuccessModal({
+      title: existing ? "Registro editado com sucesso" : "Registro realizado",
+      description: existing
+        ? "As alterações foram salvas no PSIU!."
+        : "O cadastro foi salvo com sucesso no PSIU!.",
+      details: [
+        { label: "Tipo", value: "Paciente" },
+        { label: "Nome", value: patient.name },
+      ],
+    });
     resetPatientForm();
     if (reactivate) setActiveTab("pacientes");
   };
@@ -716,6 +800,7 @@ function CadastroPage() {
   const startReactivate = (patient: Patient) => {
     setReactivateTarget(patient);
     fillPatientDraft(patient);
+    setPatientModalOpen(true);
     setMessage("");
   };
 
@@ -768,18 +853,36 @@ function CadastroPage() {
           </TabsList>
 
           <TabsContent value="clinicas" className="mt-5">
-            <section className="grid gap-5 lg:grid-cols-[420px_minmax(0,1fr)]">
-              <div className="glass-card p-5">
+            <section className="grid gap-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-black">Clínicas</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {clinics.length} clínicas cadastradas
+                  </p>
+                </div>
+                <Button onClick={openNewClinic} className="w-full sm:w-auto">
+                  <Plus className="h-4 w-4" /> Nova clínica
+                </Button>
+              </div>
+
+              {clinicModalOpen && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-background/75 p-4 backdrop-blur-sm">
+                  <div className="glass-card max-h-[92vh] w-full max-w-2xl overflow-y-auto p-5">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-lg font-bold">
                     {clinicDraft.id ? "Editar clínica" : "Nova clínica"}
                   </h2>
-                  {clinicDraft.id && (
-                    <Button variant="ghost" size="sm" onClick={resetClinicForm}>
-                      <X className="h-4 w-4" /> Cancelar
-                    </Button>
-                  )}
-                </div>
+                <Button variant="ghost" size="sm" onClick={resetClinicForm}>
+                  <X className="h-4 w-4" /> Cancelar
+                </Button>
+              </div>
+
+                {message && (
+                  <div className="mt-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+                    {message}
+                  </div>
+                )}
 
                 <div className="mt-4 grid gap-4">
                   <Field label="Nome">
@@ -890,6 +993,8 @@ function CadastroPage() {
                   </Button>
                 </div>
               </div>
+                </div>
+              )}
 
               <div>
                 <div className="grid gap-3 md:hidden">
@@ -897,21 +1002,24 @@ function CadastroPage() {
                     const count = activePatients.filter((patient) => patient.clinicId === clinic.id).length;
                     return (
                       <article key={clinic.id} className="glass-card p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 className="min-w-0 break-words font-semibold">{clinic.name}</h3>
-                          <div className="flex shrink-0 gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => editClinic(clinic)}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => removeClinic(clinic.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                        <div>
+                          <h3 className="min-w-0 break-words text-lg font-bold">{clinic.name}</h3>
+                          <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">
+                            Clínica cadastrada
+                          </p>
                         </div>
                         <div className="mt-3 grid gap-2">
-                          <MobileField label="Tipos" value={clinicTypeLabel(clinic)} />
                           <MobileField label="Prazo" value={clinicPaymentTermLabel(clinic)} />
+                          <MobileField label="Tipos" value={clinicTypeLabel(clinic)} />
                           <MobileField label="Pacientes" value={String(count)} />
+                        </div>
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <Button variant="outline" size="sm" onClick={() => editClinic(clinic)}>
+                            <Pencil className="h-4 w-4" /> Editar
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => removeClinic(clinic.id)}>
+                            <Trash2 className="h-4 w-4" /> Excluir
+                          </Button>
                         </div>
                       </article>
                     );
@@ -959,18 +1067,104 @@ function CadastroPage() {
           </TabsContent>
 
           <TabsContent value="pacientes" className="mt-5">
-            <section className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-              <div className="glass-card p-5">
+            <section className="grid gap-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-black">Pacientes</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {activePatients.length} pacientes ativos
+                  </p>
+                </div>
+                <Button onClick={openNewPatient} className="w-full sm:w-auto">
+                  <Plus className="h-4 w-4" /> Novo paciente
+                </Button>
+              </div>
+
+              <div className="glass-card p-4">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr),220px,260px,auto] lg:items-end">
+                  <Field label="Buscar paciente">
+                    <Input
+                      value={patientSearch}
+                      onChange={(event) => setPatientSearch(event.target.value)}
+                      placeholder="Digite o nome do paciente"
+                    />
+                  </Field>
+
+                  <Field label="Origem">
+                    <Select
+                      value={patientOriginFilter}
+                      onValueChange={(value) =>
+                        setPatientOriginFilter(value as PatientOriginFilter)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos</SelectItem>
+                        <SelectItem value="clinica">Clínica</SelectItem>
+                        <SelectItem value="particular">Particular</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field label="Clínica">
+                    <Select
+                      value={patientClinicFilter}
+                      onValueChange={setPatientClinicFilter}
+                      disabled={patientOriginFilter === "particular" || clinics.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as clínicas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as clínicas</SelectItem>
+                        {clinics.map((clinic) => (
+                          <SelectItem key={clinic.id} value={clinic.id}>
+                            {clinic.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearPatientFilters}
+                    className="w-full lg:w-auto"
+                  >
+                    Limpar filtros
+                  </Button>
+                </div>
+
+                <div className="mt-3 flex flex-col gap-1 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    Exibindo {filteredActivePatients.length} de {activePatients.length} pacientes ativos.
+                  </span>
+                  {clinics.length === 0 && (
+                    <span>Nenhuma clínica cadastrada para filtrar.</span>
+                  )}
+                </div>
+              </div>
+
+              {patientModalOpen && !reactivateTarget && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-background/75 p-4 backdrop-blur-sm">
+                  <div className="glass-card max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-lg font-bold">
                     {patientDraft.id ? "Editar paciente" : "Novo paciente"}
                   </h2>
-                  {patientDraft.id && (
-                    <Button variant="ghost" size="sm" onClick={resetPatientForm}>
-                      <X className="h-4 w-4" /> Cancelar
-                    </Button>
-                  )}
-                </div>
+                <Button variant="ghost" size="sm" onClick={resetPatientForm}>
+                  <X className="h-4 w-4" /> Cancelar
+                </Button>
+              </div>
+
+                {message && (
+                  <div className="mt-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+                    {message}
+                  </div>
+                )}
 
                 <div className="mt-4 grid gap-4">
                   <Field label="Nome">
@@ -1194,11 +1388,17 @@ function CadastroPage() {
                   </Button>
                 </div>
               </div>
+                </div>
+              )}
 
               <PatientList
-                patients={activePatients}
+                patients={filteredActivePatients}
                 clinics={clinics}
-                emptyLabel="Nenhum paciente ativo."
+                emptyLabel={
+                  activePatients.length
+                    ? "Nenhum paciente encontrado com os filtros selecionados."
+                    : "Nenhum paciente ativo."
+                }
                 onEdit={editPatient}
                 onClose={closePatient}
                 onDelete={requestDeletePatient}
@@ -1208,8 +1408,18 @@ function CadastroPage() {
 
           <TabsContent value="encerrados" className="mt-5">
             <section className="grid gap-5">
-              {reactivateTarget && (
-                <div className="glass-card p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-black">Encerrados</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {closedPatients.length} pacientes encerrados
+                  </p>
+                </div>
+              </div>
+
+              {patientModalOpen && reactivateTarget && (
+                <div className="fixed inset-0 z-50 grid place-items-center bg-background/75 p-4 backdrop-blur-sm">
+                  <div className="glass-card max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                       <h2 className="text-lg font-bold">Reativar {reactivateTarget.name}</h2>
@@ -1221,6 +1431,12 @@ function CadastroPage() {
                       <X className="h-4 w-4" /> Cancelar
                     </Button>
                   </div>
+
+                  {message && (
+                    <div className="mt-4 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
+                      {message}
+                    </div>
+                  )}
 
                   <div className="mt-4 grid gap-4">
                     <Field label="Nome">
@@ -1442,6 +1658,7 @@ function CadastroPage() {
                     </Button>
                   </div>
                 </div>
+                </div>
               )}
 
               <PatientList
@@ -1546,6 +1763,15 @@ function CadastroPage() {
             </div>
           </div>
         )}
+
+        {successModal && (
+          <ActionSuccessModal
+            title={successModal.title}
+            description={successModal.description}
+            details={successModal.details}
+            onClose={() => setSuccessModal(null)}
+          />
+        )}
       </div>
     </AppLayout>
   );
@@ -1570,8 +1796,12 @@ function PatientList({
   onReactivate?: (patient: Patient) => void;
   onDelete: (patientId: string) => void;
 }) {
-  const clinicName = (patient: Patient) => {
-    if (patient.paymentType !== "clinica") return "Particular";
+  const patientOrigin = (patient: Patient) => {
+    return patient.paymentType === "clinica" ? "Clínica" : "Particular";
+  };
+
+  const patientClinic = (patient: Patient) => {
+    if (patient.paymentType !== "clinica") return "";
     return clinics.find((clinic) => clinic.id === patient.clinicId)?.name ?? "Clínica removida";
   };
 
@@ -1593,33 +1823,52 @@ function PatientList({
       <div className="grid gap-3 md:hidden">
         {patients.map((patient) => (
           <article key={patient.id} className="glass-card p-4">
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="min-w-0 break-words font-semibold">{patient.name}</h3>
-              <div className="flex shrink-0 gap-1">
-                {!closed && (
-                  <Button variant="ghost" size="icon" onClick={() => onEdit(patient)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-                {closed ? (
-                  <Button variant="ghost" size="icon" onClick={() => onReactivate?.(patient)}>
-                    <RotateCcw className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="icon" onClick={() => onClose?.(patient.id)}>
-                    <Archive className="h-4 w-4" />
-                  </Button>
-                )}
-                <Button variant="ghost" size="icon" onClick={() => onDelete(patient.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+            <div>
+              <h3 className="min-w-0 break-words text-lg font-bold">{patient.name}</h3>
+              <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">
+                {patientOrigin(patient)} {patientClinic(patient) ? `· ${patientClinic(patient)}` : ""}
+              </p>
             </div>
+
             <div className="mt-3 grid gap-2">
-              <MobileField label="Dias/horários" value={scheduleText(patient)} />
-              <MobileField label="Tipo" value={patientType(patient)} />
-              <MobileField label="Origem" value={clinicName(patient)} />
-              <MobileField label="Valor" value={money(patient.sessionValue)} />
+              <MobileField label="Origem" value={patientOrigin(patient)} />
+              {patientClinic(patient) && (
+                <MobileField label="Clínica" value={patientClinic(patient)} />
+              )}
+              <MobileField label="Tipo de atendimento" value={patientType(patient)} />
+              {!closed && <MobileField label="Valor" value={money(patient.sessionValue)} />}
+              {!closed && <MobileField label="Dia/horário" value={scheduleText(patient)} />}
+              {!closed && (
+                <MobileField
+                  label="Início da agenda"
+                  value={formatDateLabel(patient.agendaStartDate ?? patient.createdAt)}
+                />
+              )}
+              {closed && (
+                <MobileField label="Encerrado em" value={formatDateLabel(patient.closedAt)} />
+              )}
+              <MobileField label="Status" value={closed ? "Encerrado" : "Ativo"} />
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {!closed && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => onEdit(patient)}>
+                    <Pencil className="h-4 w-4" /> Editar
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => onClose?.(patient.id)}>
+                    <Archive className="h-4 w-4" /> Encerrar
+                  </Button>
+                </>
+              )}
+              {closed && (
+                <Button variant="outline" size="sm" onClick={() => onReactivate?.(patient)}>
+                  <RotateCcw className="h-4 w-4" /> Reativar
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => onDelete(patient.id)}>
+                <Trash2 className="h-4 w-4" /> Excluir
+              </Button>
             </div>
           </article>
         ))}
@@ -1643,7 +1892,9 @@ function PatientList({
                 <td className="px-4 py-3 font-medium">{patient.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{scheduleText(patient)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{patientType(patient)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{clinicName(patient)}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {patientClinic(patient) || "Particular"}
+                </td>
                 <td className="px-4 py-3 tabular-nums">{money(patient.sessionValue)}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">

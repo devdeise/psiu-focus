@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { ActionSuccessModal } from "@/components/action-success-modal";
 import { AppLayout } from "@/components/app-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -118,6 +119,12 @@ type SessionPresenceDraft = {
   paymentReceived: SessionPresenceChoice;
 };
 
+type SuccessModal = {
+  title: string;
+  description?: string;
+  details: Array<{ label: string; value: string }>;
+};
+
 const durationOptions = [30, 45, 50, 60, 90, 120] as const;
 const justifiedAbsenceReasons = [
   "Problema de saúde",
@@ -201,6 +208,8 @@ function AgendaPage() {
   const [justifiedAbsence, setJustifiedAbsence] = useState<JustifiedAbsenceDraft | null>(null);
   const [monthlyPayment, setMonthlyPayment] = useState<MonthlyPaymentDraft | null>(null);
   const [sessionPresence, setSessionPresence] = useState<SessionPresenceDraft | null>(null);
+  const [presenceToConfirm, setPresenceToConfirm] = useState<AgendaItem | null>(null);
+  const [successModal, setSuccessModal] = useState<SuccessModal | null>(null);
 
   const reload = () => {
     setPatients(getPatients());
@@ -253,6 +262,24 @@ function AgendaPage() {
   const pending = items.filter((item) => !isDone(item));
   const done = items.filter((item) => isDone(item));
 
+  const appointmentDateLabel = (item: Appointment) =>
+    parseDateKey(dateKeyFromIso(item.startsAt)).toLocaleDateString("pt-BR");
+
+  const appointmentTimeLabel = (item: Appointment) =>
+    `${appointmentTime(item)} - ${appointmentEnd(item)}`;
+
+  const showPresenceSuccess = (item: AgendaItem) => {
+    setSuccessModal({
+      title: "Presença confirmada com sucesso",
+      description: "O atendimento foi registrado como realizado.",
+      details: [
+        { label: "Paciente", value: item.patient.name },
+        { label: "Data", value: appointmentDateLabel(item) },
+        { label: "Horário", value: appointmentTimeLabel(item) },
+      ],
+    });
+  };
+
   const updateAppointment = (appointment: Appointment, patch: Partial<Appointment>) => {
     upsertAppointment({
       ...appointment,
@@ -292,9 +319,18 @@ function AgendaPage() {
       repasseConfirmed: item.patient.paymentType !== "clinica",
     });
     setMessage("Atendimento marcado como realizado.");
+    showPresenceSuccess(item);
   };
 
   const markPresence = (item: AgendaItem) => {
+    setPresenceToConfirm(item);
+  };
+
+  const continuePresenceAfterConfirmation = () => {
+    if (!presenceToConfirm) return;
+    const item = presenceToConfirm;
+    setPresenceToConfirm(null);
+
     if (item.patient.paymentType === "clinica") {
       completePresence(item, true);
       return;
@@ -396,6 +432,15 @@ function AgendaPage() {
       absenceReason: note ? `${savedReason}. Observação: ${note}` : savedReason,
     });
     setMessage("Falta justificada registrada.");
+    setSuccessModal({
+      title: "Falta justificada registrada com sucesso",
+      details: [
+        { label: "Paciente", value: justifiedAbsence.appointment.patient.name },
+        { label: "Data", value: appointmentDateLabel(justifiedAbsence.appointment) },
+        { label: "Horário", value: appointmentTimeLabel(justifiedAbsence.appointment) },
+        { label: "Motivo", value: savedReason },
+      ],
+    });
     setJustifiedAbsence(null);
   };
 
@@ -641,6 +686,14 @@ function AgendaPage() {
     setReschedule(null);
     setRescheduleContext("");
     setMessage("Atendimento remarcado.");
+    setSuccessModal({
+      title: "Atendimento remarcado com sucesso",
+      details: [
+        { label: "Paciente", value: reschedule.appointment.patient.name },
+        { label: "Nova data", value: parseDateKey(reschedule.date).toLocaleDateString("pt-BR") },
+        { label: "Novo horário", value: reschedule.time },
+      ],
+    });
     reload();
   };
 
@@ -1289,6 +1342,50 @@ function AgendaPage() {
           </div>
         )}
 
+        {presenceToConfirm && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-4 backdrop-blur-sm">
+            <div className="glass-card w-full max-w-lg p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">Confirmar presença?</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Essa ação registrará o atendimento como realizado.
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setPresenceToConfirm(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="mt-4 grid gap-2 rounded-lg border border-border bg-card/40 p-4 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Paciente</span>
+                  <span className="font-medium">{presenceToConfirm.patient.name}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Data</span>
+                  <span>{appointmentDateLabel(presenceToConfirm)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Horário</span>
+                  <span>{appointmentTimeLabel(presenceToConfirm)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Valor</span>
+                  <span>{money(presenceToConfirm.patient.sessionValue)}</span>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <Button variant="outline" onClick={() => setPresenceToConfirm(null)}>
+                  Cancelar
+                </Button>
+                <Button onClick={continuePresenceAfterConfirmation}>Confirmar presença</Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {sessionPresence && (
           <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-4 backdrop-blur-sm">
             <div className="glass-card w-full max-w-lg p-5">
@@ -1656,6 +1753,15 @@ function AgendaPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {successModal && (
+          <ActionSuccessModal
+            title={successModal.title}
+            description={successModal.description}
+            details={successModal.details}
+            onClose={() => setSuccessModal(null)}
+          />
         )}
       </div>
     </AppLayout>
